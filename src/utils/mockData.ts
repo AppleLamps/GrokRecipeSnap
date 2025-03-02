@@ -66,7 +66,7 @@ export const sampleRecipes: Recipe[] = [
   {
     id: '3',
     title: 'Classic Chocolate Soufflé',
-    description: 'A decadent, airy chocolate dessert that's sure to impress any guest.',
+    description: 'A decadent, airy chocolate dessert that\'s sure to impress any guest.',
     imageUrl: 'https://images.unsplash.com/photo-1610611424854-5e07032143d8?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
     cookTime: '45 min',
     servings: 4,
