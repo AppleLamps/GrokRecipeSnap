@@ -1,8 +1,7 @@
-
 import React, { useRef, useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import Button from './Button';
-import { Camera, X, Image as ImageIcon } from 'lucide-react';
+import { Camera, X, Image as ImageIcon, Upload } from 'lucide-react';
 
 interface CameraProps {
   onCapture: (imageSrc: string) => void;
@@ -131,23 +130,23 @@ const CameraComponent: React.FC<CameraProps> = ({
             <div className="flex-1 flex flex-col items-center justify-center p-6 bg-muted/30 rounded-2xl">
               <div className="text-center max-w-xs">
                 <div className="mb-4 mx-auto w-16 h-16 flex items-center justify-center rounded-full bg-muted">
-                  <Camera size={28} className="text-muted-foreground" />
+                  <Upload size={28} className="text-muted-foreground" />
                 </div>
-                <h3 className="text-lg mb-2">Camera access required</h3>
+                <h3 className="text-lg mb-2">Upload Your Food Photo</h3>
                 <p className="text-sm text-muted-foreground mb-6">
-                  Please allow camera access to snap your food photo, or upload an image from your gallery.
+                  Camera access is not available. Please upload an image from your gallery instead.
                 </p>
               </div>
             </div>
           )}
           
           <div className="flex justify-center gap-4 py-6">
-            <label htmlFor="image-upload">
+            <label htmlFor="image-upload" className="flex-1 max-w-36">
               <Button 
-                variant="outline"
+                variant="primary"
                 size="lg"
                 icon={<ImageIcon size={18} />}
-                className="cursor-pointer"
+                className="cursor-pointer w-full"
               >
                 Gallery
               </Button>
@@ -160,14 +159,17 @@ const CameraComponent: React.FC<CameraProps> = ({
               />
             </label>
             
-            <Button
-              size="lg"
-              onClick={captureImage}
-              disabled={!isStreaming}
-              icon={<Camera size={18} />}
-            >
-              Capture
-            </Button>
+            {isCameraSupported && (
+              <Button
+                size="lg"
+                onClick={captureImage}
+                disabled={!isStreaming}
+                icon={<Camera size={18} />}
+                className="flex-1 max-w-36"
+              >
+                Capture
+              </Button>
+            )}
           </div>
         </>
       ) : (
@@ -187,6 +189,7 @@ const CameraComponent: React.FC<CameraProps> = ({
               variant="outline"
               size="lg"
               onClick={resetCamera}
+              className="flex-1 max-w-36"
             >
               Retake
             </Button>
@@ -194,6 +197,7 @@ const CameraComponent: React.FC<CameraProps> = ({
             <Button
               size="lg"
               onClick={useImage}
+              className="flex-1 max-w-36"
             >
               Use Photo
             </Button>
