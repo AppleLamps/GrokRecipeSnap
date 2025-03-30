@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Plus, ArrowLeft, Upload, AlertCircle } from 'lucide-react';
+import { Camera, Plus, ArrowLeft, Upload, AlertCircle, BookOpen } from 'lucide-react';
 import Header from '@/components/Header';
 import Button from '@/components/Button';
 import CameraComponent from '@/components/Camera';
 import RecipeCard from '@/components/RecipeCard';
+import ArticleCard from '@/components/ArticleCard';
 import LoadingState from '@/components/LoadingState';
 import { usePhotoCapture } from '@/hooks/usePhotoCapture';
 import { sampleRecipes } from '@/utils/mockData';
 import { Recipe } from '@/components/RecipeCard';
+import { Article, generateArticles } from '@/utils/articleService';
 
 /**
  * Helper function to clean any markdown formatting that might have slipped through
@@ -39,6 +41,8 @@ const cleanFormatting = (text: string): string => {
 
 const Index = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [isLoadingArticles, setIsLoadingArticles] = useState(false);
   
   const {
     photo,
@@ -111,6 +115,23 @@ const Index = () => {
   const triggerFileInput = () => {
     fileInputRef.current?.click();
   };
+  
+  // Load articles when the component mounts
+  useEffect(() => {
+    const loadArticles = async () => {
+      setIsLoadingArticles(true);
+      try {
+        const generatedArticles = await generateArticles(3);
+        setArticles(generatedArticles);
+      } catch (error) {
+        console.error('Error loading articles:', error);
+      } finally {
+        setIsLoadingArticles(false);
+      }
+    };
+
+    loadArticles();
+  }, []);
   
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -193,6 +214,54 @@ const Index = () => {
                     className="animate-fade-in" 
                   />
                 ))}
+              </div>
+            </div>
+
+            {/* Food & Cooking Articles */}
+            <div className="mt-16">
+              <div className="flex items-center justify-between mb-6 px-4">
+                <h2 className="text-xl font-display">Food & Cooking Articles</h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<BookOpen size={16} />}
+                  onClick={() => {
+                    setIsLoadingArticles(true);
+                    generateArticles(3)
+                      .then(newArticles => setArticles(newArticles))
+                      .catch(error => console.error('Error refreshing articles:', error))
+                      .finally(() => setIsLoadingArticles(false));
+                  }}
+                >
+                  Refresh Articles
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
+                {isLoadingArticles ? (
+                  // Loading placeholders
+                  Array(3).fill(null).map((_, i) => (
+                    <div 
+                      key={i} 
+                      className="animate-pulse rounded-xl border bg-card overflow-hidden"
+                    >
+                      <div className="aspect-[1.85/1] bg-secondary" />
+                      <div className="p-4 space-y-3">
+                        <div className="h-6 bg-secondary rounded w-3/4" />
+                        <div className="h-4 bg-secondary rounded w-full" />
+                        <div className="h-4 bg-secondary rounded w-2/3" />
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  articles.map(article => (
+                    <ArticleCard 
+                      key={article.id} 
+                      article={article}
+                      className="animate-fade-in"
+                    />
+                  ))
+                )}
               </div>
             </div>
           </div>
