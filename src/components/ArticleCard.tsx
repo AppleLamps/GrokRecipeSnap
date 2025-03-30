@@ -42,7 +42,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({
               {article.tags.slice(0, 3).map((tag, index) => (
                 <span 
                   key={index}
-                  className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground"
+                  className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs text-primary/80"
                 >
                   <Tag size={12} />
                   {tag}
@@ -57,12 +57,12 @@ const ArticleCard: React.FC<ArticleCardProps> = ({
           </h3>
           
           {/* Summary */}
-          <p className="mb-4 text-sm text-muted-foreground line-clamp-2">
+          <p className="mb-4 text-sm text-foreground/70 line-clamp-2">
             {article.summary}
           </p>
           
           {/* Metadata */}
-          <div className="mt-auto flex items-center gap-4 text-xs text-muted-foreground">
+          <div className="mt-auto flex items-center gap-4 text-xs text-foreground/60">
             <time dateTime={article.publishedAt} className="flex items-center gap-1">
               {new Date(article.publishedAt).toLocaleDateString('en-US', {
                 month: 'short',

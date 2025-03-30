@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Plus, ArrowLeft, Upload, AlertCircle, BookOpen } from 'lucide-react';
+import { Camera, Plus, ArrowLeft, Upload, AlertCircle, BookOpen, RefreshCw } from 'lucide-react';
 import Header from '@/components/Header';
 import Button from '@/components/Button';
 import CameraComponent from '@/components/Camera';
@@ -7,9 +7,14 @@ import RecipeCard from '@/components/RecipeCard';
 import ArticleCard from '@/components/ArticleCard';
 import LoadingState from '@/components/LoadingState';
 import { usePhotoCapture } from '@/hooks/usePhotoCapture';
-import { sampleRecipes } from '@/utils/mockData';
-import { Recipe } from '@/components/RecipeCard';
-import { Article, generateArticles } from '@/utils/articleService';
+import type { Recipe } from '@/components/RecipeCard';
+import { Article } from '@/types/article';
+import { generateArticle } from '@/utils/articleService';
+import { getPopularRecipes, deleteAllPopularRecipes } from '@/lib/recipes';
+import { getRecentFoodArticles, deleteAllFoodArticles } from '@/lib/foodArticles';
+import { testSupabaseConnection } from '@/lib/supabase';
+import { generateRecipes } from '@/utils/recipeService';
+import { generateArticlesFromTopics } from '@/utils/articleService';
 
 /**
  * Helper function to clean any markdown formatting that might have slipped through
@@ -39,10 +44,20 @@ const cleanFormatting = (text: string): string => {
     .trim();
 };
 
+const convertFoodArticleToArticle = (foodArticle: any): Article => ({
+  id: foodArticle.id,
+  title: foodArticle.title,
+  content: foodArticle.content,
+  summary: foodArticle.metadata?.summary || foodArticle.content.substring(0, 150) + '...',
+  imageUrl: foodArticle.metadata?.imageUrl || 'https://source.unsplash.com/800x400/?cooking',
+  readTime: foodArticle.metadata?.readTime || '5 min read',
+  publishedAt: foodArticle.created_at,
+  tags: foodArticle.tags || [],
+  metadata: foodArticle.metadata
+});
+
 const Index = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [isLoadingArticles, setIsLoadingArticles] = useState(false);
   
   const {
     photo,
@@ -53,27 +68,136 @@ const Index = () => {
     submitPhoto,
     handleFileUpload,
     reset,
-    error,
+    error: photoError,
     recipeData
   } = usePhotoCapture();
   
   const [generatedRecipe, setGeneratedRecipe] = useState<Recipe | null>(null);
   
-  // When the API processing is done, convert the API response to a recipe
+  const [localRecipes, setLocalRecipes] = useState<Recipe[]>([]);
+  const [isLoadingPopularRecipes, setIsLoadingPopularRecipes] = useState(true);
+  const [popularRecipesError, setPopularRecipesError] = useState<string | null>(null);
+  
+  const [localArticles, setLocalArticles] = useState<Article[]>([]);
+  const [isLoadingArticles, setIsLoadingArticles] = useState(true);
+  const [articlesError, setArticlesError] = useState<string | null>(null);
+  
+  const fetchPopularRecipes = async (forceRefresh = false) => {
+    setIsLoadingPopularRecipes(true);
+    setPopularRecipesError(null);
+
+    try {
+      if (!forceRefresh) {
+        // Try to get existing recipes first
+        const recipes = await getPopularRecipes(4);
+        if (recipes.length > 0) {
+          setLocalRecipes(recipes);
+          setIsLoadingPopularRecipes(false);
+          return;
+        }
+      }
+
+      // If forceRefresh, delete all existing recipes first
+      if (forceRefresh) {
+        await deleteAllPopularRecipes();
+      }
+
+      // Clear existing recipes before generating new ones
+      setLocalRecipes([]);
+
+      // Generate new recipes
+      await generateRecipes(
+        4,
+        (recipe) => {
+          setLocalRecipes(prev => [...prev, recipe]);
+        },
+        (error, index) => {
+          console.error('Error generating recipe:', error);
+          setPopularRecipesError(prev => prev ? `${prev}; Recipe ${index + 1} Failed` : `Recipe ${index + 1} Failed`);
+        },
+        () => {
+          setIsLoadingPopularRecipes(false);
+        }
+      );
+    } catch (error) {
+      console.error('Error fetching/generating popular recipes:', error);
+      setPopularRecipesError('Failed to load popular recipes');
+      setIsLoadingPopularRecipes(false);
+    }
+  };
+
+  const fetchArticles = async (forceRefresh = false) => {
+    setIsLoadingArticles(true);
+    setArticlesError(null);
+
+    try {
+      // First try to get existing articles from Supabase
+      const articles = await getRecentFoodArticles(5);
+      
+      // If we have articles and don't need to refresh, just display them
+      if (!forceRefresh && articles.length > 0) {
+        setLocalArticles(articles.map(convertFoodArticleToArticle));
+        setIsLoadingArticles(false);
+        return;
+      }
+
+      // If forceRefresh or no articles exist, generate new ones
+      if (forceRefresh) {
+        await deleteAllFoodArticles();
+      }
+      setLocalArticles([]);
+
+      // Generate and store new articles using predefined topics
+      const topics = [
+        "Essential Knife Skills Every Home Cook Should Master",
+        "Understanding Different Cooking Oils and Their Uses",
+        "The Art of Balancing Flavors in Cooking",
+        "Meal Prep Strategies for Busy Professionals",
+        "Sustainable Cooking: Reducing Food Waste"
+      ];
+
+      await generateArticlesFromTopics(
+        topics,
+        (article) => {
+          setLocalArticles(prev => [...prev, article]);
+        },
+        (error, index, topic) => {
+          console.error(`Error generating article for "${topic}":`, error);
+          setArticlesError(prev => prev ? `${prev}; Article ${index + 1} Failed` : `Article ${index + 1} Failed`);
+        },
+        () => {
+          setIsLoadingArticles(false);
+        },
+        true // Store in food_articles table
+      );
+    } catch (error) {
+      console.error('Error fetching/generating articles:', error);
+      setArticlesError('Failed to load articles');
+      setIsLoadingArticles(false);
+    }
+  };
+
+  useEffect(() => {
+    // Test Supabase connection
+    testSupabaseConnection().then(isConnected => {
+      if (!isConnected) {
+        console.error('Failed to connect to Supabase');
+      }
+    });
+
+    fetchPopularRecipes(false);
+    fetchArticles(false);
+  }, []);
+  
   useEffect(() => {
     if (recipeData && !isProcessing) {
       try {
-        // Convert API response to Recipe format
         const { recipe } = recipeData;
-        
-        // Log for debugging
         console.log("Creating recipe card with data:", {
           title: recipe.title,
           ingredients: recipe.ingredients?.length || 0,
           instructions: recipe.instructions?.length || 0
         });
-        
-        // Ensure all required fields have values and clean any remaining formatting
         const safeRecipe: Recipe = {
           id: Date.now().toString(),
           title: cleanFormatting(recipe.title) || "Homemade Dish",
@@ -82,18 +206,16 @@ const Index = () => {
             ? recipe.ingredients.map(cleanFormatting)
             : ["Ingredients could not be detected. Please try again with a clearer image."],
           instructions: Array.isArray(recipe.instructions) && recipe.instructions.length > 0
-            ? recipe.instructions.map(cleanFormatting)
+            ? recipe.instructions
             : ["Instructions could not be detected. Please try again with a clearer image."],
           cookTime: cleanFormatting(recipe.cookTime) || "30 mins",
           servings: recipe.servings || 4,
           imageUrl: photo || 'https://via.placeholder.com/400',
           tags: Array.isArray(recipe.tags) ? recipe.tags.map(cleanFormatting) : []
         };
-        
         setGeneratedRecipe(safeRecipe);
       } catch (err) {
         console.error("Error creating recipe from API response:", err);
-        // Don't set generatedRecipe if there's an error
       }
     }
   }, [recipeData, isProcessing, photo]);
@@ -107,7 +229,6 @@ const Index = () => {
     const file = e.target.files?.[0];
     if (file) {
       handleFileUpload(file);
-      // Reset the input so the same file can be selected again if needed
       e.target.value = '';
     }
   };
@@ -116,26 +237,8 @@ const Index = () => {
     fileInputRef.current?.click();
   };
   
-  // Load articles when the component mounts
-  useEffect(() => {
-    const loadArticles = async () => {
-      setIsLoadingArticles(true);
-      try {
-        const generatedArticles = await generateArticles(3);
-        setArticles(generatedArticles);
-      } catch (error) {
-        console.error('Error loading articles:', error);
-      } finally {
-        setIsLoadingArticles(false);
-      }
-    };
-
-    loadArticles();
-  }, []);
-  
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      {/* Hidden file input */}
       <input 
         type="file"
         ref={fileInputRef}
@@ -144,7 +247,6 @@ const Index = () => {
         className="hidden"
       />
       
-      {/* Header */}
       <Header 
         transparent={isCapturingPhoto}
         leftAction={generatedRecipe && (
@@ -158,9 +260,7 @@ const Index = () => {
         )}
       />
       
-      {/* Main content */}
       <main className="flex-1 pt-16">
-        {/* Home screen with upload options */}
         {!isCapturingPhoto && !photo && !generatedRecipe && (
           <div className="max-w-screen-md mx-auto px-4 py-8">
             <div className="text-center mb-12 mt-8">
@@ -193,81 +293,89 @@ const Index = () => {
               </Button>
             </div>
             
-            {error && (
-              <div className="text-center mb-6 p-4 bg-red-50 rounded-lg border border-red-100 animate-fade-in">
-                <div className="flex items-center justify-center gap-2 text-red-600 mb-1">
-                  <AlertCircle size={16} />
-                  <span className="font-medium">Error</span>
-                </div>
-                <p className="text-red-700">{error}</p>
+            {photoError && (
+              <div className="text-center mb-6 p-4 bg-destructive/10 border border-destructive/30 rounded-lg flex items-center text-destructive">
+                <AlertCircle size={20} className="mr-3 flex-shrink-0" />
+                <p>{photoError}</p>
               </div>
             )}
             
-            {/* Recipe suggestions */}
-            <div className="mt-12">
-              <h2 className="text-xl font-display mb-6 px-4">Popular Recipes</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
-                {sampleRecipes.map((recipe) => (
-                  <RecipeCard 
-                    key={recipe.id} 
-                    recipe={recipe} 
-                    className="animate-fade-in" 
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Food & Cooking Articles */}
-            <div className="mt-16">
-              <div className="flex items-center justify-between mb-6 px-4">
-                <h2 className="text-xl font-display">Food & Cooking Articles</h2>
-                <Button
-                  variant="ghost"
+            <div className="mt-20">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-2xl font-display tracking-tight">Popular Recipes</h2>
+                <Button 
+                  variant="outline"
                   size="sm"
-                  icon={<BookOpen size={16} />}
-                  onClick={() => {
-                    setIsLoadingArticles(true);
-                    generateArticles(3)
-                      .then(newArticles => setArticles(newArticles))
-                      .catch(error => console.error('Error refreshing articles:', error))
-                      .finally(() => setIsLoadingArticles(false));
-                  }}
+                  icon={<RefreshCw size={16} />}
+                  onClick={() => fetchPopularRecipes(true)}
+                  disabled={isLoadingPopularRecipes}
                 >
-                  Refresh Articles
+                  {isLoadingPopularRecipes ? 'Refreshing...' : 'Refresh Recipes'}
                 </Button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
-                {isLoadingArticles ? (
-                  // Loading placeholders
-                  Array(3).fill(null).map((_, i) => (
-                    <div 
-                      key={i} 
-                      className="animate-pulse rounded-xl border bg-card overflow-hidden"
-                    >
-                      <div className="aspect-[1.85/1] bg-secondary" />
-                      <div className="p-4 space-y-3">
-                        <div className="h-6 bg-secondary rounded w-3/4" />
-                        <div className="h-4 bg-secondary rounded w-full" />
-                        <div className="h-4 bg-secondary rounded w-2/3" />
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  articles.map(article => (
-                    <ArticleCard 
-                      key={article.id} 
-                      article={article}
-                      className="animate-fade-in"
-                    />
-                  ))
-                )}
+              {isLoadingPopularRecipes && localRecipes.length === 0 && (
+                <LoadingState text="Loading popular recipes..." />
+              )}
+              {!isLoadingPopularRecipes && popularRecipesError && localRecipes.length === 0 && (
+                <div className="text-center text-muted-foreground">
+                  <p>Error loading popular recipes: {popularRecipesError}</p>
+                </div>
+              )}
+              {localRecipes.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  {localRecipes.map((recipe) => (
+                    <RecipeCard key={recipe.id} recipe={recipe} className="animate-fade-in" />
+                  ))}
+                  {isLoadingPopularRecipes && Array.from({ length: Math.max(0, 4 - localRecipes.length) }).map((_, idx) => (
+                    <div key={`recipe-placeholder-${idx}`} className="floating-card bg-muted/50 animate-pulse h-[500px] rounded-xl"></div>
+                  ))}
+                </div>
+              )}
+              {!isLoadingPopularRecipes && !popularRecipesError && localRecipes.length === 0 && (
+                <p className="text-center text-muted-foreground">No popular recipes available at the moment.</p>
+              )}
+            </div>
+
+            <div className="mt-16">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-display">Food & Cooking Articles</h2>
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  icon={<RefreshCw size={16} />}
+                  onClick={() => fetchArticles(true)}
+                  disabled={isLoadingArticles}
+                >
+                  {isLoadingArticles ? 'Refreshing...' : 'Refresh Articles'}
+                </Button>
               </div>
+
+              {isLoadingArticles && localArticles.length === 0 && (
+                <LoadingState text="Loading articles..." />
+              )}
+              {!isLoadingArticles && articlesError && localArticles.length === 0 && (
+                <div className="text-center text-muted-foreground">
+                  <p>Error loading articles: {articlesError}</p>
+                </div>
+              )}
+              {localArticles.length > 0 && (
+                <div className="space-y-6">
+                  {localArticles.map((article) => (
+                    <ArticleCard key={article.id} article={article} className="animate-fade-in" />
+                  ))}
+                  {isLoadingArticles && Array.from({ length: Math.max(0, 5 - localArticles.length) }).map((_, idx) => (
+                    <div key={`article-placeholder-${idx}`} className="floating-card bg-muted/50 animate-pulse h-[150px] rounded-xl"></div>
+                  ))}
+                </div>
+              )}
+              {!isLoadingArticles && !articlesError && localArticles.length === 0 && (
+                <p className="text-center text-muted-foreground">No articles available at the moment.</p>
+              )}
             </div>
           </div>
         )}
         
-        {/* Camera capture view */}
         {isCapturingPhoto && (
           <div className="absolute inset-0 z-40 bg-background">
             <CameraComponent
@@ -277,46 +385,12 @@ const Index = () => {
           </div>
         )}
         
-        {/* Processing view */}
         {photo && isProcessing && (
           <div className="absolute inset-0 z-40 flex items-center justify-center bg-background">
             <LoadingState />
           </div>
         )}
         
-        {/* Error while displaying recipe */}
-        {photo && !isProcessing && error && !generatedRecipe && (
-          <div className="max-w-screen-md mx-auto p-6 text-center">
-            <div className="bg-red-50 rounded-xl p-6 mb-6 border border-red-100">
-              <div className="text-red-600 mb-4">
-                <AlertCircle size={40} className="mx-auto mb-2" />
-                <h3 className="text-lg font-medium">Recipe Generation Failed</h3>
-              </div>
-              <p className="text-red-700 mb-4">{error}</p>
-              <Button 
-                onClick={handleNewRecipe}
-                variant="outline"
-              >
-                Try Again
-              </Button>
-            </div>
-            
-            {photo && (
-              <div className="mt-6">
-                <h4 className="text-sm text-muted-foreground mb-2">Uploaded Image</h4>
-                <div className="rounded-lg overflow-hidden max-w-xs mx-auto">
-                  <img 
-                    src={photo} 
-                    alt="Uploaded food" 
-                    className="w-full h-auto"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        
-        {/* Generated recipe view */}
         {generatedRecipe && !isProcessing && (
           <RecipeCard 
             recipe={generatedRecipe} 
@@ -329,3 +403,5 @@ const Index = () => {
 };
 
 export default Index;
+
+
