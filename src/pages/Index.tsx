@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Plus, ArrowLeft, Upload, AlertCircle, BookOpen, RefreshCw } from 'lucide-react';
+import { Camera, Plus, ArrowLeft, Upload, AlertCircle, BookOpen, RefreshCw, MessageSquare } from 'lucide-react';
 import Header from '@/components/Header';
 import Button from '@/components/Button';
 import CameraComponent from '@/components/Camera';
@@ -15,6 +15,7 @@ import { getRecentFoodArticles, deleteAllFoodArticles } from '@/lib/foodArticles
 import { testSupabaseConnection } from '@/lib/supabase';
 import { generateRecipes } from '@/utils/recipeService';
 import { generateArticlesFromTopics } from '@/utils/articleService';
+import CulinaryExpertChat from '@/components/CulinaryExpertChat';
 
 /**
  * Helper function to clean any markdown formatting that might have slipped through
@@ -73,6 +74,7 @@ const Index = () => {
   } = usePhotoCapture();
   
   const [generatedRecipe, setGeneratedRecipe] = useState<Recipe | null>(null);
+  const [isExpertChatOpen, setIsExpertChatOpen] = useState(false);
   
   const [localRecipes, setLocalRecipes] = useState<Recipe[]>([]);
   const [isLoadingPopularRecipes, setIsLoadingPopularRecipes] = useState(true);
@@ -237,6 +239,9 @@ const Index = () => {
     fileInputRef.current?.click();
   };
   
+  const openExpertChat = () => setIsExpertChatOpen(true);
+  const closeExpertChat = () => setIsExpertChatOpen(false);
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <input 
@@ -272,7 +277,7 @@ const Index = () => {
               </p>
             </div>
             
-            <div className="flex justify-center gap-4 mb-12 animate-slide-up animation-delay-200">
+            <div className="flex flex-wrap justify-center gap-4 mb-12 animate-slide-up animation-delay-200">
               <Button 
                 size="lg"
                 onClick={triggerFileInput}
@@ -290,6 +295,16 @@ const Index = () => {
                 variant="outline"
               >
                 Use Camera
+              </Button>
+              
+              <Button
+                size="lg"
+                onClick={openExpertChat}
+                icon={<MessageSquare size={20} />}
+                className="shadow-lg"
+                variant="secondary"
+              >
+                Chat with Culinary Expert
               </Button>
             </div>
             
@@ -397,6 +412,11 @@ const Index = () => {
             isFullView={true}
           />
         )}
+
+        <CulinaryExpertChat 
+          isOpen={isExpertChatOpen} 
+          onClose={closeExpertChat} 
+        />
       </main>
     </div>
   );
