@@ -3,6 +3,7 @@ export interface MacroNutrients {
   protein: number
   carbs: number
   fat: number
+  saturatedFat?: number; // Added for more detailed fat breakdown
   fiber?: number
   sugar?: number
   sodium?: number

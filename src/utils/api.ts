@@ -22,6 +22,7 @@ export interface ApiResponse {
       fiber?: number;
       sugar?: number;
       sodium?: number;
+      saturatedFat?: number; // Added saturated fat
     };
   };
 }
@@ -92,7 +93,7 @@ export async function analyzeFood(imageData: string): Promise<ApiResponse> {
             content: [
               {
                 type: "text",
-                text: "You are a helpful AI that analyzes food images and provides detailed recipes. Respond with a recipe that includes: title, description, ingredients list, and step-by-step instructions. Include cooking time, servings, and difficulty. DO NOT use markdown formatting or symbols (like *, **, #) in your response. Use plain text with clear section headings."
+                text: "You are a helpful AI that analyzes food images and provides detailed recipes. Respond with a recipe that includes: title, description, ingredients list, and step-by-step instructions. Include cooking time, servings, and difficulty. Provide detailed nutritional information per serving, including calories, protein, carbs, total fat, saturated fat, fiber, sugar, and sodium. DO NOT use markdown formatting or symbols (like *, **, #) in your response. Use plain text with clear section headings."
               }
             ]
           },
@@ -108,7 +109,7 @@ export async function analyzeFood(imageData: string): Promise<ApiResponse> {
               },
               {
                 type: "text",
-                text: "What's this dish? Please provide a detailed recipe for it with a descriptive title, list of ingredients, clear instructions, and nutritional information. Include macros (calories, protein, carbs, fat) per serving. Use plain text only, no markdown formatting."
+                text: "What's this dish? Please provide a detailed recipe for it with a descriptive title, list of ingredients, clear instructions, and detailed nutritional information per serving. Include macros (calories, protein, carbs, total fat, saturated fat, fiber, sugar, sodium). Use plain text only, no markdown formatting."
               }
             ]
           }
@@ -510,9 +511,10 @@ function extractMacros(text: string): { calories: number; protein: number; carbs
   const fiberMatch = nutritionText.match(/Fiber[:\-]*\s*(\d+)(?:\s*g)?/i);
   const sugarMatch = nutritionText.match(/Sugar[:\-]*\s*(\d+)(?:\s*g)?/i);
   const sodiumMatch = nutritionText.match(/Sodium[:\-]*\s*(\d+)(?:\s*mg)?/i);
+  const saturatedFatMatch = nutritionText.match(/(?:Saturated Fat|Sat Fat)[:\-]*\s*(\d+)(?:\s*g)?/i); // Added saturated fat match
 
   // Build the macros object with optional fields
-  const macros = {
+  const macros: { calories: number; protein: number; carbs: number; fat: number; fiber?: number; sugar?: number; sodium?: number; saturatedFat?: number } = {
     calories: caloriesMatch ? parseInt(caloriesMatch[1], 10) : 0,
     protein: proteinMatch ? parseInt(proteinMatch[1], 10) : 0,
     carbs: carbsMatch ? parseInt(carbsMatch[1], 10) : 0,
@@ -523,6 +525,7 @@ function extractMacros(text: string): { calories: number; protein: number; carbs
   if (fiberMatch) macros.fiber = parseInt(fiberMatch[1], 10);
   if (sugarMatch) macros.sugar = parseInt(sugarMatch[1], 10);
   if (sodiumMatch) macros.sodium = parseInt(sodiumMatch[1], 10);
+  if (saturatedFatMatch) macros.saturatedFat = parseInt(saturatedFatMatch[1], 10); // Added saturated fat parsing
 
   return macros;
 }

@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Clock, Users, BookOpen, Bookmark, BookmarkCheck, MessageCircle, Send, X } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react'; // Added useMemo
+import { Clock, Users, BookOpen, Bookmark, BookmarkCheck, MessageCircle, Send, X, Info, Repeat } from 'lucide-react'; // Added Info, Repeat
 import { cn } from '@/lib/utils';
 import Button from './Button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // Added Tooltip
+import { Switch } from "@/components/ui/switch"; // Added Switch
+import { Label } from "@/components/ui/label"; // Added Label
 import { sendMessageToChef } from '@/utils/chatService';
 
 // Helper function to format chef's messages
@@ -78,6 +81,7 @@ export interface MacroNutrients {
   protein: number;
   carbs: number;
   fat: number;
+  saturatedFat?: number; // Added from types/recipe.ts update
   fiber?: number;
   sugar?: number;
   sodium?: number;
@@ -116,6 +120,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showFullView, setShowFullView] = useState(isFullView);
+  const [showTotalNutrition, setShowTotalNutrition] = useState(false); // State for total nutrition view
 
   // --- Ref for chat message container ---
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -349,7 +354,76 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
   }, [recipe.instructions]);
 
   // Counter for actual steps (excluding headers)
-  let stepCounter = 0;
+  // let stepCounter = 0; // This seems unused, commenting out for now
+
+  // --- Nutrition Calculations ---
+  const nutritionData = useMemo(() => {
+    if (!recipe.macros) return null;
+
+    const servings = recipe.servings || 1; // Default to 1 serving if not specified
+    const macros = recipe.macros;
+
+    // Reference Daily Values (based on a 2000 kcal diet)
+    const dv = {
+      calories: 2000,
+      totalFat: 78, // g
+      saturatedFat: 20, // g
+      sodium: 2300, // mg
+      carbs: 275, // g
+      fiber: 28, // g
+      protein: 50, // g
+      // Sugar doesn't have an official DV, but we can track it
+    };
+
+    const calculateNutrition = (multiplier: number) => {
+      const current = {
+        calories: (macros.calories || 0) * multiplier,
+        protein: (macros.protein || 0) * multiplier,
+        carbs: (macros.carbs || 0) * multiplier,
+        fat: (macros.fat || 0) * multiplier,
+        saturatedFat: (macros.saturatedFat !== undefined ? macros.saturatedFat : null) === null ? null : (macros.saturatedFat || 0) * multiplier,
+        fiber: (macros.fiber !== undefined ? macros.fiber : null) === null ? null : (macros.fiber || 0) * multiplier,
+        sugar: (macros.sugar !== undefined ? macros.sugar : null) === null ? null : (macros.sugar || 0) * multiplier,
+        sodium: (macros.sodium !== undefined ? macros.sodium : null) === null ? null : (macros.sodium || 0) * multiplier,
+        netCarbs: (macros.carbs || 0) * multiplier - ((macros.fiber || 0) * multiplier),
+      };
+
+      // Calculate %DV only for per-serving view
+      const dvPercent = multiplier === 1 ? {
+        calories: dv.calories ? Math.round((current.calories / dv.calories) * 100) : null,
+        totalFat: dv.totalFat ? Math.round((current.fat / dv.totalFat) * 100) : null,
+        saturatedFat: dv.saturatedFat && current.saturatedFat !== null ? Math.round((current.saturatedFat / dv.saturatedFat) * 100) : null,
+        sodium: dv.sodium && current.sodium !== null ? Math.round((current.sodium / dv.sodium) * 100) : null,
+        carbs: dv.carbs ? Math.round((current.carbs / dv.carbs) * 100) : null,
+        fiber: dv.fiber && current.fiber !== null ? Math.round((current.fiber / dv.fiber) * 100) : null,
+        protein: dv.protein ? Math.round((current.protein / dv.protein) * 100) : null,
+      } : null;
+
+      return { ...current, dvPercent };
+    };
+
+    const perServing = calculateNutrition(1);
+    const totalRecipe = calculateNutrition(servings);
+
+    // Macronutrient distribution calculation (based on per serving)
+    const totalCalories = perServing.calories;
+    const proteinCalories = perServing.protein * 4;
+    const carbsCalories = perServing.carbs * 4;
+    const fatCalories = perServing.fat * 9;
+    const totalMacroCalories = proteinCalories + carbsCalories + fatCalories;
+
+    const distribution = totalMacroCalories > 0 ? {
+      protein: Math.round((proteinCalories / totalMacroCalories) * 100),
+      carbs: Math.round((carbsCalories / totalMacroCalories) * 100),
+      fat: Math.round((fatCalories / totalMacroCalories) * 100),
+    } : { protein: 0, carbs: 0, fat: 0 };
+
+
+    return { perServing, totalRecipe, distribution, servings };
+
+  }, [recipe.macros, recipe.servings]);
+  // -----------------------------
+
 
   // Compact card view
   if (!showFullView) {
@@ -590,141 +664,211 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                   )}
                 </div>
               ) : (
-                <div className="space-y-6">
-                  {/* Nutrition Information */}
-                  <div className="bg-secondary/20 rounded-lg p-6">
-                    <h3 className="text-lg font-medium mb-4">Nutritional Information</h3>
-                    <p className="text-sm text-muted-foreground mb-6">
-                      Nutritional values per serving. This recipe makes {recipe.servings} servings.
-                    </p>
-
-                    {recipe.macros && recipe.macros.calories > 0 ? (
-                      <div className="space-y-5">
-                        {/* Calories */}
-                        <div>
-                          <div className="flex justify-between mb-1">
-                            <span className="text-sm font-medium">Calories</span>
-                            <span className="text-sm font-semibold">{recipe.macros.calories} kcal</span>
-                          </div>
-                          <div className="w-full bg-secondary/30 rounded-full h-2.5">
-                            <div className="bg-primary h-2.5 rounded-full" style={{ width: `${Math.min(100, (recipe.macros.calories / 800) * 100)}%` }}></div>
-                          </div>
+                <TooltipProvider> {/* Added TooltipProvider */}
+                  <div className="space-y-6">
+                    {/* Nutrition Information */}
+                    <div className="bg-secondary/20 rounded-lg p-6">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-medium">Nutritional Information</h3>
+                        <div className="flex items-center space-x-2">
+                          <Label htmlFor="nutrition-toggle" className="text-xs text-muted-foreground">
+                            {showTotalNutrition ? `Total (${nutritionData?.servings || recipe.servings} Servings)` : 'Per Serving'}
+                          </Label>
+                          <Switch
+                            id="nutrition-toggle"
+                            checked={showTotalNutrition}
+                            onCheckedChange={setShowTotalNutrition}
+                            aria-label="Toggle between per serving and total recipe nutrition"
+                          />
                         </div>
-
-                        {/* Macronutrients */}
-                        <div className="grid grid-cols-3 gap-4 pt-2">
-                          {/* Protein */}
-                          <div className="bg-secondary/30 rounded-lg p-4 text-center hover:shadow-md transition-shadow">
-                            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                              <span className="text-blue-600 font-semibold">{recipe.macros.protein}g</span>
-                            </div>
-                            <span className="text-sm font-medium block">Protein</span>
-                          </div>
-
-                          {/* Carbs */}
-                          <div className="bg-secondary/30 rounded-lg p-4 text-center hover:shadow-md transition-shadow">
-                            <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                              <span className="text-amber-600 font-semibold">{recipe.macros.carbs}g</span>
-                            </div>
-                            <span className="text-sm font-medium block">Carbs</span>
-                          </div>
-
-                          {/* Fat */}
-                          <div className="bg-secondary/30 rounded-lg p-4 text-center hover:shadow-md transition-shadow">
-                            <div className="w-12 h-12 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                              <span className="text-rose-600 font-semibold">{recipe.macros.fat}g</span>
-                            </div>
-                            <span className="text-sm font-medium block">Fat</span>
-                          </div>
-                        </div>
-
-                        {/* Macronutrient Distribution */}
-                        <div className="pt-4 mt-4 border-t border-border/30">
-                          <h4 className="text-sm font-medium mb-3">Macronutrient Distribution</h4>
-                          <div className="h-4 w-full rounded-full overflow-hidden flex">
-                            {/* Calculate percentages */}
-                            {(() => {
-                              const total = recipe.macros.protein * 4 + recipe.macros.carbs * 4 + recipe.macros.fat * 9;
-                              const proteinPct = Math.round((recipe.macros.protein * 4 / total) * 100);
-                              const carbsPct = Math.round((recipe.macros.carbs * 4 / total) * 100);
-                              const fatPct = Math.round((recipe.macros.fat * 9 / total) * 100);
-
-                              return (
-                                <>
-                                  <div
-                                    className="bg-blue-500 h-full"
-                                    style={{ width: `${proteinPct}%` }}
-                                    title={`Protein: ${proteinPct}%`}
-                                  ></div>
-                                  <div
-                                    className="bg-amber-500 h-full"
-                                    style={{ width: `${carbsPct}%` }}
-                                    title={`Carbs: ${carbsPct}%`}
-                                  ></div>
-                                  <div
-                                    className="bg-rose-500 h-full"
-                                    style={{ width: `${fatPct}%` }}
-                                    title={`Fat: ${fatPct}%`}
-                                  ></div>
-                                </>
-                              );
-                            })()}
-                          </div>
-                          <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                            <span>Protein</span>
-                            <span>Carbs</span>
-                            <span>Fat</span>
-                          </div>
-                        </div>
-
-                        {/* Additional nutrients if available */}
-                        {(recipe.macros.fiber !== undefined ||
-                          recipe.macros.sugar !== undefined ||
-                          recipe.macros.sodium !== undefined) && (
-                          <div className="pt-4 mt-4 border-t border-border/30">
-                            <h4 className="text-sm font-medium mb-3">Additional Nutrients</h4>
-                            <div className="grid grid-cols-3 gap-4">
-                              {recipe.macros.fiber !== undefined && (
-                                <div className="flex flex-col bg-secondary/20 p-3 rounded-lg">
-                                  <span className="text-sm text-muted-foreground">Fiber</span>
-                                  <span className="text-sm font-medium">{recipe.macros.fiber}g</span>
-                                </div>
-                              )}
-
-                              {recipe.macros.sugar !== undefined && (
-                                <div className="flex flex-col bg-secondary/20 p-3 rounded-lg">
-                                  <span className="text-sm text-muted-foreground">Sugar</span>
-                                  <span className="text-sm font-medium">{recipe.macros.sugar}g</span>
-                                </div>
-                              )}
-
-                              {recipe.macros.sodium !== undefined && (
-                                <div className="flex flex-col bg-secondary/20 p-3 rounded-lg">
-                                  <span className="text-sm text-muted-foreground">Sodium</span>
-                                  <span className="text-sm font-medium">{recipe.macros.sodium}mg</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
                       </div>
-                    ) : (
-                      <div className="text-center py-8">
-                        <div className="w-16 h-16 bg-secondary/40 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+                      <p className="text-sm text-muted-foreground mb-6">
+                        {showTotalNutrition
+                          ? `Values represent the entire recipe (${nutritionData?.servings || recipe.servings} servings).`
+                          : `Values per serving. Recipe makes ${nutritionData?.servings || recipe.servings} servings.`}
+                        {!showTotalNutrition && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info size={12} className="inline-block ml-1 text-muted-foreground/70 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">Daily Values (%DV) based on a 2000 calorie diet.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </p>
+
+                      {nutritionData ? (
+                        <div className="space-y-6">
+                          {/* Use data based on toggle state */}
+                          {(() => {
+                            const data = showTotalNutrition ? nutritionData.totalRecipe : nutritionData.perServing;
+                            const dvPercent = nutritionData.perServing.dvPercent; // %DV always based on per serving
+
+                            return (
+                              <>
+                                {/* Calories */}
+                                <div>
+                                  <div className="flex justify-between items-baseline mb-1">
+                                    <span className="text-sm font-medium">Calories</span>
+                                    <div>
+                                      <span className="text-sm font-semibold">{Math.round(data.calories)} kcal</span>
+                                      {!showTotalNutrition && dvPercent?.calories !== null && (
+                                        <span className="text-xs text-muted-foreground ml-1">({dvPercent?.calories}% DV)</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {!showTotalNutrition && (
+                                    <div className="w-full bg-secondary/30 rounded-full h-2 overflow-hidden">
+                                      <div className="bg-primary h-full" style={{ width: `${Math.min(100, dvPercent?.calories || 0)}%` }}></div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Macronutrients Table */}
+                                <div className="space-y-3 pt-4 border-t border-border/30">
+                                  <h4 className="text-sm font-medium mb-2">Macronutrients</h4>
+                                  <div className="grid grid-cols-3 gap-x-4 gap-y-2 text-sm">
+                                    {/* Headers */}
+                                    <div className="font-medium text-muted-foreground">Nutrient</div>
+                                    <div className="font-medium text-muted-foreground text-right">Amount</div>
+                                    {!showTotalNutrition && <div className="font-medium text-muted-foreground text-right">%DV</div>}
+                                    {showTotalNutrition && <div></div>} {/* Placeholder for alignment */}
+
+                                    {/* Protein */}
+                                    <div>Protein</div>
+                                    <div className="text-right font-medium">{Math.round(data.protein)}g</div>
+                                    {!showTotalNutrition && <div className="text-right text-muted-foreground">{dvPercent?.protein !== null ? `${dvPercent?.protein}%` : 'N/A'}</div>}
+                                    {showTotalNutrition && <div></div>}
+
+                                    {/* Total Carbs */}
+                                    <div>Total Carbs</div>
+                                    <div className="text-right font-medium">{Math.round(data.carbs)}g</div>
+                                    {!showTotalNutrition && <div className="text-right text-muted-foreground">{dvPercent?.carbs !== null ? `${dvPercent?.carbs}%` : 'N/A'}</div>}
+                                    {showTotalNutrition && <div></div>}
+
+                                    {/* Net Carbs */}
+                                    {data.fiber !== null && (
+                                      <>
+                                        <div className="pl-4 text-muted-foreground">Net Carbs
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Info size={12} className="inline-block ml-1 text-muted-foreground/70 cursor-help" />
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p className="text-xs">Total Carbs - Fiber</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </div>
+                                        <div className="text-right font-medium">{Math.round(data.netCarbs)}g</div>
+                                        {!showTotalNutrition && <div></div>} {/* No DV for Net Carbs */}
+                                        {showTotalNutrition && <div></div>}
+                                      </>
+                                    )}
+
+                                    {/* Fiber */}
+                                    {data.fiber !== null && (
+                                      <>
+                                        <div className="pl-4 text-muted-foreground">↳ Fiber</div>
+                                        <div className="text-right font-medium">{Math.round(data.fiber)}g</div>
+                                        {!showTotalNutrition && <div className="text-right text-muted-foreground">{dvPercent?.fiber !== null ? `${dvPercent?.fiber}%` : 'N/A'}</div>}
+                                        {showTotalNutrition && <div></div>}
+                                      </>
+                                    )}
+
+                                    {/* Sugar */}
+                                    {data.sugar !== null && (
+                                      <>
+                                        <div className="pl-4 text-muted-foreground">↳ Sugar</div>
+                                        <div className="text-right font-medium">{Math.round(data.sugar)}g</div>
+                                        {!showTotalNutrition && <div></div>} {/* No DV for Sugar */}
+                                        {showTotalNutrition && <div></div>}
+                                      </>
+                                    )}
+
+                                    {/* Total Fat */}
+                                    <div>Total Fat</div>
+                                    <div className="text-right font-medium">{Math.round(data.fat)}g</div>
+                                    {!showTotalNutrition && <div className="text-right text-muted-foreground">{dvPercent?.totalFat !== null ? `${dvPercent?.totalFat}%` : 'N/A'}</div>}
+                                    {showTotalNutrition && <div></div>}
+
+                                    {/* Saturated Fat */}
+                                    {data.saturatedFat !== null && (
+                                      <>
+                                        <div className="pl-4 text-muted-foreground">↳ Saturated Fat</div>
+                                        <div className="text-right font-medium">{Math.round(data.saturatedFat)}g</div>
+                                        {!showTotalNutrition && <div className="text-right text-muted-foreground">{dvPercent?.saturatedFat !== null ? `${dvPercent?.saturatedFat}%` : 'N/A'}</div>}
+                                        {showTotalNutrition && <div></div>}
+                                      </>
+                                    )}
+
+                                    {/* Sodium */}
+                                    {data.sodium !== null && (
+                                      <>
+                                        <div>Sodium</div>
+                                        <div className="text-right font-medium">{Math.round(data.sodium)}mg</div>
+                                        {!showTotalNutrition && <div className="text-right text-muted-foreground">{dvPercent?.sodium !== null ? `${dvPercent?.sodium}%` : 'N/A'}</div>}
+                                        {showTotalNutrition && <div></div>}
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Macronutrient Distribution (only for per serving) */}
+                                {!showTotalNutrition && (
+                                  <div className="pt-4 mt-4 border-t border-border/30">
+                                    <h4 className="text-sm font-medium mb-3">Caloric Distribution</h4>
+                                    <div className="h-3 w-full rounded-full overflow-hidden flex bg-secondary/50">
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div className="bg-blue-500 h-full" style={{ width: `${nutritionData.distribution.protein}%` }}></div>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p className="text-xs">Protein: {nutritionData.distribution.protein}%</p></TooltipContent>
+                                      </Tooltip>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div className="bg-amber-500 h-full" style={{ width: `${nutritionData.distribution.carbs}%` }}></div>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p className="text-xs">Carbs: {nutritionData.distribution.carbs}%</p></TooltipContent>
+                                      </Tooltip>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div className="bg-rose-500 h-full" style={{ width: `${nutritionData.distribution.fat}%` }}></div>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p className="text-xs">Fat: {nutritionData.distribution.fat}%</p></TooltipContent>
+                                      </Tooltip>
+                                    </div>
+                                    <div className="flex justify-between text-xs text-muted-foreground mt-1.5">
+                                      <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-blue-500 mr-1.5"></span>Protein</span>
+                                      <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-amber-500 mr-1.5"></span>Carbs</span>
+                                      <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-rose-500 mr-1.5"></span>Fat</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <div className="w-16 h-16 bg-secondary/40 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
                             <circle cx="12" cy="12" r="10"></circle>
                             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
                             <line x1="12" y1="17" x2="12.01" y2="17"></line>
                           </svg>
+                          </div>
+                          <p className="text-muted-foreground">Nutritional information not available for this recipe.</p>
+                          <p className="text-xs text-muted-foreground mt-2">Try uploading a clearer image or a different angle of the dish.</p>
                         </div>
-                        <p className="text-muted-foreground">Nutritional information not available for this recipe.</p>
-                        <p className="text-xs text-muted-foreground mt-2">Try uploading a clearer image or a different angle of the dish.</p>
-                      </div>
-                    )}
-                  </div>
+                      )} {/* End nutritionData check */}
+                    </div> {/* End of bg-secondary/20 container */}
 
-                  {/* Dietary Information */}
-                  {recipe.tags && recipe.tags.length > 0 && (
+                    {/* Dietary Information */}
+                    {recipe.tags && recipe.tags.length > 0 && (
                     <div className="pt-4">
                       <h3 className="text-sm font-medium mb-3">Dietary Information</h3>
                       <div className="flex flex-wrap gap-2">
@@ -735,10 +879,11 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                         ))}
                       </div>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
+                    )} {/* End recipe.tags check */}
+                  </div> {/* End of space-y-6 container */}
+                </TooltipProvider>
+              )} {/* End of Nutrition Tab Content */}
+            </div> {/* End of Tab Content container */}
 
             {/* Action buttons */}
             <div className="mt-8 flex justify-center gap-4">
@@ -758,9 +903,9 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                 Chat with the Chef
               </Button>
             </div>
-          </div>
-        </div>
-      </div>
+          </div> {/* End Content Container */}
+        </div> {/* End flex flex-col w-full animate-fade-in */}
+      </div> {/* End relative max-w-4xl mx-auto pb-12 */}
 
       {/* Chat with Chef floating widget */}
       {isChatOpen && (
