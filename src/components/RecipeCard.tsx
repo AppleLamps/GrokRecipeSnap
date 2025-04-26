@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'; // Added useMemo
-import { Clock, Users, BookOpen, Bookmark, BookmarkCheck, MessageCircle, Send, X, Info, Repeat } from 'lucide-react'; // Added Info, Repeat
+import { Clock, Users, BookOpen, Bookmark, BookmarkCheck, MessageCircle, Send, X, Info, Repeat, Paperclip, Image as ImageIcon } from 'lucide-react'; // Added icons
 import { cn } from '@/lib/utils';
 import Button from './Button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // Added Tooltip
@@ -7,21 +7,52 @@ import { Switch } from "@/components/ui/switch"; // Added Switch
 import { Label } from "@/components/ui/label"; // Added Label
 import { sendMessageToChef } from '@/utils/chatService';
 
+// Define the structure for chat messages
+interface ChatMessage {
+  role: 'user' | 'chef';
+  content: string | React.ReactNode; // Content can be text or image preview
+  id?: string;
+}
+
+// Helper function to format inline text (bold, italic, etc.)
+const formatInlineText = (text: string) => {
+  // Split the text by bold markers, keeping the delimiters
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+
+  return parts.map((part, index) => {
+    // Check if this part is bold (surrounded by **)
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={index} className="font-medium">
+          {part.slice(2, -2)} {/* Remove the ** markers */}
+        </strong>
+      );
+    }
+    // Add handling for other inline formats here if needed (e.g., italics with *text*)
+    return part; // Return plain text parts
+  });
+};
+
 // Helper function to format chef's messages
-const formatChefMessage = (content: string) => {
+const formatChefMessage = (content: string | React.ReactNode) => {
+  if (typeof content !== 'string') return content; // Return directly if it's already a ReactNode (e.g., image preview)
   if (!content) return '';
 
   // Split into paragraphs
   return content.split('\n\n').map((paragraph, index) => {
-    // Handle lists
-    if (paragraph.trim().startsWith('- ')) {
-      const items = paragraph.split('\n');
+    let processedParagraph = paragraph.trim();
+
+    // Remove markdown headers
+    processedParagraph = processedParagraph.replace(/^#+\s+/, ''); // Remove leading #, ##, ### etc. followed by space
+
+    // Handle unordered lists
+    if (processedParagraph.startsWith('- ')) {
+      const items = processedParagraph.split('\n').map(item => item.replace(/^-\s*/, '').trim());
       return (
-        <ul key={index} className="list-none space-y-2 my-3">
+        <ul key={index} className="list-disc space-y-2 my-3 pl-6"> {/* Improved list styling */}
           {items.map((item, i) => (
-            <li key={i} className="flex items-start">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary/60 mt-2 mr-2 flex-shrink-0" />
-              {formatInlineText(item.replace('- ', ''))}
+            item && <li key={i} className="pl-1">
+              {formatInlineText(item)}{/* Apply inline formatting to list item text */}
             </li>
           ))}
         </ul>
@@ -29,19 +60,17 @@ const formatChefMessage = (content: string) => {
     }
 
     // Handle numbered lists
-    if (paragraph.match(/^\d+\./)) {
-      const items = paragraph.split('\n');
+    if (processedParagraph.match(/^\d+\.\s/)) {
+      const items = processedParagraph.split('\n').map(item => item.trim());
       return (
-        <ol key={index} className="list-none space-y-2 my-3">
+        <ol key={index} className="list-decimal space-y-2 my-3 pl-6"> {/* Improved list styling */}
           {items.map((item, i) => {
-            const numberMatch = item.match(/^(\d+)\.\s*/);
-            if (!numberMatch) return null;
-            const number = numberMatch[1];
-            const text = item.replace(/^\d+\.\s*/, '');
+            const match = item.match(/^(\d+)\.\s*(.*)/);
+            if (!match) return null;
+            const text = match[2];
             return (
-              <li key={i} className="flex items-start">
-                <span className="w-5 flex-shrink-0 font-medium text-primary/80">{number}.</span>
-                {formatInlineText(text)}
+              text && <li key={i} className="pl-1">
+                {formatInlineText(text)} {/* Apply inline formatting to list item text */}
               </li>
             );
           })}
@@ -52,27 +81,9 @@ const formatChefMessage = (content: string) => {
     // Regular paragraphs
     return (
       <p key={index} className={index > 0 ? 'mt-3' : ''}>
-        {formatInlineText(paragraph)}
+        {formatInlineText(processedParagraph)} {/* Use the processed paragraph */}
       </p>
     );
-  });
-};
-
-// Helper function to format inline text (bold, italic, etc.)
-const formatInlineText = (text: string) => {
-  // Split the text by bold markers
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
-
-  return parts.map((part, index) => {
-    // Check if this part is bold (surrounded by **)
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return (
-        <strong key={index} className="font-medium">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-    return part;
   });
 };
 
@@ -114,16 +125,18 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
   const [isSaved, setIsSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<'ingredients' | 'instructions' | 'nutrition'>('ingredients');
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [chatMessages, setChatMessages] = useState<{role: 'user' | 'chef', content: string, id?: string}[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showFullView, setShowFullView] = useState(isFullView);
   const [showTotalNutrition, setShowTotalNutrition] = useState(false); // State for total nutrition view
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null); // State for uploaded image preview
 
-  // --- Ref for chat message container ---
+  // --- Refs ---
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // --------------------------------------
 
   // --- Add effect to control body scroll ---
@@ -182,13 +195,52 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
     }
   };
 
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setUploadedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+    // Reset file input value to allow re-uploading the same file
+    if (event.target) event.target.value = '';
+  };
+
+  const triggerFileInput = () => {
+    fileInputRef.current?.click();
+  };
+
   const handleSendMessage = async () => {
-    if (!currentMessage.trim()) return;
+    if (!currentMessage.trim() && !uploadedImage) return;
+
+    // Create user message content with text and/or image
+    const userMessageContent: React.ReactNode[] = [];
+    if (uploadedImage) {
+      userMessageContent.push(
+        <img key="img" src={uploadedImage} alt="Uploaded food" className="max-w-xs max-h-40 rounded-md my-2" />
+      );
+    }
+    if (currentMessage.trim()) {
+      userMessageContent.push(<span key="text">{currentMessage.trim()}</span>);
+    }
 
     // Add user message to chat
-    const userMessage = currentMessage;
-    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: <>{userMessageContent}</>
+    };
+
+    setChatMessages(prev => [...prev, userMessage]);
+
+    // Capture message text and image before clearing
+    const messageToSend = currentMessage.trim();
+    const imageToSend = uploadedImage;
+
+    // Clear input fields
     setCurrentMessage('');
+    setUploadedImage(null);
     setIsLoading(true);
 
     try {
@@ -200,11 +252,19 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
         id: tempMessageId
       }]);
 
+      // Convert chat history to string format for the API
+      const apiChatHistory = chatMessages
+        .filter(msg => typeof msg.content === 'string') // Only include text history
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content as string
+        }));
+
       // Use the streaming API to get a response from the AI
       await sendMessageToChef(
-        userMessage,
+        messageToSend,
         recipe,
-        chatMessages, // Pass the conversation history
+        apiChatHistory, // Pass the conversation history
         (chunkText, isDone) => {
           // Update the message content with each chunk
           setChatMessages(prev =>
@@ -984,6 +1044,15 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
         </div> {/* End flex flex-col w-full animate-fade-in */}
       </div> {/* End relative max-w-4xl mx-auto pb-12 */}
 
+      {/* Hidden file input for image uploads */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleImageUpload}
+        accept="image/*"
+        className="hidden"
+      />
+
       {/* Chat with Chef floating widget */}
       {isChatOpen && (
         <div className="fixed bottom-4 right-4 z-50 flex flex-col">
@@ -997,22 +1066,22 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
             </button>
           ) : (
             <div
-              className="bg-card rounded-lg shadow-xl w-[400px] flex flex-col overflow-hidden border border-border/30"
-              style={{ height: isExpanded ? '80vh' : '500px' }}
+              className="bg-card rounded-lg shadow-xl w-[500px] flex flex-col overflow-hidden border border-border/30"
+              style={{ height: isExpanded ? '80vh' : '600px', maxHeight: '800px' }}
             >
               {/* Chat header with context */}
-              <div className="px-4 py-3 border-b border-border/50 bg-card/95">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <MessageCircle size={14} className="text-primary" />
+              <div className="px-5 py-4 border-b border-border/50 bg-card/95">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <MessageCircle size={18} className="text-primary" />
                     </div>
-                    <h3 className="font-medium text-foreground">Chef Assistant</h3>
+                    <h3 className="font-semibold text-lg text-foreground">Chef Assistant</h3>
                   </div>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setIsExpanded(!isExpanded)}
-                      className="h-7 w-7 rounded-full hover:bg-secondary flex items-center justify-center transition-colors"
+                      className="h-8 w-8 rounded-full hover:bg-secondary flex items-center justify-center transition-colors"
                       aria-label={isExpanded ? "Shrink chat" : "Expand chat"}
                     >
                       {isExpanded ? (
@@ -1027,7 +1096,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                     </button>
                     <button
                       onClick={() => setIsCollapsed(true)}
-                      className="h-7 w-7 rounded-full hover:bg-secondary flex items-center justify-center transition-colors"
+                      className="h-8 w-8 rounded-full hover:bg-secondary flex items-center justify-center transition-colors"
                       aria-label="Minimize chat"
                     >
                       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1036,15 +1105,15 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                     </button>
                     <button
                       onClick={() => setIsChatOpen(false)}
-                      className="h-7 w-7 rounded-full hover:bg-secondary flex items-center justify-center transition-colors"
+                      className="h-8 w-8 rounded-full hover:bg-secondary flex items-center justify-center transition-colors"
                       aria-label="Close chat"
                     >
-                      <X size={14} />
+                      <X size={16} />
                     </button>
                   </div>
                 </div>
                 {/* Recipe context bar */}
-                <div className="bg-secondary/30 rounded-md px-3 py-2 text-xs text-muted-foreground flex items-center gap-2">
+                <div className="bg-secondary/30 rounded-md px-3 py-2 text-xs text-muted-foreground flex items-center gap-2 mt-2">
                   <BookOpen size={12} />
                   <span>Currently helping with: <span className="font-medium text-foreground">{recipe.title}</span></span>
                 </div>
@@ -1053,7 +1122,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
               {/* Chat messages */}
               <div
                 ref={chatContainerRef}
-                className="flex-1 overflow-auto py-4 px-4 space-y-4 bg-secondary/20"
+                className="flex-1 overflow-auto py-5 px-5 space-y-5 bg-secondary/20"
               >
                 {chatMessages.map((message, i) => (
                   <div
@@ -1067,18 +1136,18 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                     )}
                     <div
                       className={cn(
-                        "max-w-[85%] rounded-lg p-3 shadow-sm",
+                        "max-w-[90%] rounded-lg p-4 shadow-sm text-base leading-relaxed",
                         message.role === 'user'
                           ? "bg-primary text-primary-foreground rounded-tr-none"
                           : "bg-card text-card-foreground rounded-tl-none border border-border/50"
                       )}
                     >
                       {message.role === 'chef' ? (
-                        <div className="text-sm leading-relaxed">
+                        <div>
                           {formatChefMessage(message.content)}
                         </div>
                       ) : (
-                        <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                        <div className="whitespace-pre-wrap">
                           {message.content}
                         </div>
                       )}
@@ -1108,7 +1177,27 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
               </div>
 
               {/* Message input */}
-              <div className="p-3 border-t border-border/50 bg-card/95">
+              <div className="p-4 border-t border-border/50 bg-card/95">
+                {/* Image preview */}
+                {uploadedImage && (
+                  <div className="mb-3 relative">
+                    <div className="relative rounded-md overflow-hidden inline-block">
+                      <img
+                        src={uploadedImage}
+                        alt="Upload preview"
+                        className="max-h-32 max-w-full rounded-md"
+                      />
+                      <button
+                        onClick={() => setUploadedImage(null)}
+                        className="absolute top-1 right-1 bg-black/60 rounded-full p-1 hover:bg-black/80 transition-colors"
+                        aria-label="Remove image"
+                      >
+                        <X size={14} className="text-white" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -1116,19 +1205,28 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                   }}
                   className="flex items-center gap-2 relative"
                 >
+                  <button
+                    type="button"
+                    onClick={triggerFileInput}
+                    className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label="Upload image"
+                  >
+                    <ImageIcon size={18} />
+                  </button>
+
                   <input
                     type="text"
                     value={currentMessage}
                     onChange={(e) => setCurrentMessage(e.target.value)}
-                    placeholder="Ask about this recipe..."
-                    className="flex-1 bg-secondary/30 rounded-full pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 border border-border/50"
+                    placeholder="Ask about this recipe or upload an image..."
+                    className="flex-1 bg-secondary/30 rounded-full pl-4 pr-10 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 border border-border/50"
                   />
                   <button
                     type="submit"
-                    disabled={isLoading || !currentMessage.trim()}
-                    className="absolute right-2 bg-primary text-primary-foreground rounded-full p-2 disabled:opacity-50 hover:bg-primary/90 transition-colors"
+                    disabled={isLoading || (!currentMessage.trim() && !uploadedImage)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 bg-primary text-primary-foreground rounded-full p-2.5 disabled:opacity-50 hover:bg-primary/90 transition-colors"
                   >
-                    <Send size={14} className={isLoading ? "opacity-0" : ""} />
+                    <Send size={16} className={isLoading ? "opacity-0" : ""} />
                   </button>
                 </form>
               </div>
