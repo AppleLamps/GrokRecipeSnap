@@ -32,8 +32,13 @@ const Header: React.FC<HeaderProps> = ({
           {leftAction ? (
             leftAction
           ) : (
-            <Link to="/" className="text-xl md:text-2xl font-display font-semibold text-primary hover:opacity-80 transition-opacity">
-              {title}
+            <Link to="/" className="flex items-center gap-2 group">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-primary-foreground font-bold">
+                R
+              </div>
+              <span className="text-xl md:text-2xl font-display font-semibold text-foreground group-hover:text-primary transition-colors">
+                Recipe<span className="text-primary">Snap</span>
+              </span>
             </Link>
           )}
         </div>
@@ -48,6 +53,14 @@ const Header: React.FC<HeaderProps> = ({
           >
             Home
           </Link>
+          <a
+            href="https://github.com/AppleLamps/GrokRecipeSnap"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
+          >
+            GitHub
+          </a>
           {rightAction && <div className="ml-4">{rightAction}</div>}
         </nav>
       </div>
