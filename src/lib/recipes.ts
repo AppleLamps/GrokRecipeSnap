@@ -17,7 +17,8 @@ function convertSupabaseRecipe(recipe: any): Recipe {
     tags: recipe.tags || [],
     content: recipe.content || '',
     created_at: recipe.created_at,
-    popularity_score: recipe.popularity_score || 0
+    popularity_score: recipe.popularity_score || 0,
+    macros: recipe.macros || null
   }
 }
 
@@ -66,6 +67,15 @@ export async function storeRecipe(
     cookTime?: string;
     servings?: number;
     tags?: string[];
+    macros?: {
+      calories: number;
+      protein: number;
+      carbs: number;
+      fat: number;
+      fiber?: number;
+      sugar?: number;
+      sodium?: number;
+    };
   }
 ): Promise<Recipe | null> {
   try {
@@ -101,7 +111,8 @@ ${metadata?.tags?.length ? `\nTags: ${metadata.tags.join(', ')}` : ''}
           tags: metadata?.tags || [],
           created_at: new Date().toISOString(),
           popularity_score: 0,
-          content
+          content,
+          macros: metadata?.macros || null
         }
       ])
       .select()
@@ -168,4 +179,4 @@ export async function incrementPopularity(id: string): Promise<void> {
   } catch (error) {
     console.error('Error incrementing recipe popularity:', error)
   }
-} 
+}

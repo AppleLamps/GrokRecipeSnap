@@ -15,7 +15,7 @@ interface ChatMessage {
 const formatInlineText = (text: string) => {
   // Split the text by bold markers, keeping the delimiters
   const parts = text.split(/(\*\*.*?\*\*)/g);
-  
+
   return parts.map((part, index) => {
     // Check if this part is bold (surrounded by **)
     if (part.startsWith('**') && part.endsWith('**')) {
@@ -34,12 +34,12 @@ const formatInlineText = (text: string) => {
 const formatExpertMessage = (content: string | React.ReactNode) => {
   if (typeof content !== 'string') return content; // Return directly if it's already a ReactNode (e.g., image preview)
   if (!content) return '';
-  
+
   // Split into paragraphs
   return content.split('\n\n').map((paragraph, index) => {
     let processedParagraph = paragraph.trim();
 
-    // --- Add step to remove markdown headers --- 
+    // --- Add step to remove markdown headers ---
     processedParagraph = processedParagraph.replace(/^#+\s+/, ''); // Remove leading #, ##, ### etc. followed by space
     // --------------------------------------------
 
@@ -47,30 +47,27 @@ const formatExpertMessage = (content: string | React.ReactNode) => {
     if (processedParagraph.startsWith('- ')) {
       const items = processedParagraph.split('\n').map(item => item.replace(/^-\s*/, '').trim());
       return (
-        <ul key={index} className="list-none space-y-2 my-3 pl-4"> {/* Added padding */}
+        <ul key={index} className="list-disc space-y-2 my-3 pl-6"> {/* Improved list styling */}
           {items.map((item, i) => (
-            item && <li key={i} className="flex items-start">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary/60 mt-2 mr-3 flex-shrink-0" /> {/* Adjusted spacing */}
+            item && <li key={i} className="pl-1">
               {formatInlineText(item)}{/* Apply inline formatting to list item text */}
             </li>
           ))}
         </ul>
       );
     }
-    
+
     // Handle numbered lists
     if (processedParagraph.match(/^\d+\.\s/)) {
       const items = processedParagraph.split('\n').map(item => item.trim());
       return (
-        <ol key={index} className="list-none space-y-2 my-3 pl-1"> {/* Adjusted padding */}
+        <ol key={index} className="list-decimal space-y-2 my-3 pl-6"> {/* Improved list styling */}
           {items.map((item, i) => {
             const match = item.match(/^(\d+)\.\s*(.*)/);
             if (!match) return null;
-            const number = match[1];
             const text = match[2];
             return (
-              text && <li key={i} className="flex items-start">
-                <span className="w-6 flex-shrink-0 font-medium text-primary/80">{number}.</span> {/* Adjusted width */}
+              text && <li key={i} className="pl-1">
                 {formatInlineText(text)} {/* Apply inline formatting to list item text */}
               </li>
             );
@@ -78,7 +75,7 @@ const formatExpertMessage = (content: string | React.ReactNode) => {
         </ol>
       );
     }
-    
+
     // Regular paragraphs
     return (
       <p key={index} className={index > 0 ? 'mt-3' : ''}>
@@ -150,12 +147,12 @@ const CulinaryExpertChat: React.FC<CulinaryExpertChatProps> = ({ isOpen, onClose
       // await new Promise(resolve => setTimeout(resolve, 1500));
 
       const tempMessageId = `temp-${Date.now()}`;
-      setChatMessages(prev => [...prev, { 
-        role: 'expert', 
+      setChatMessages(prev => [...prev, {
+        role: 'expert',
         content: '', // Start with empty content
         id: tempMessageId
       }]);
-      
+
       // Call the actual expert chat service
       await sendMessageToExpert(
         messageToSend,
@@ -163,14 +160,14 @@ const CulinaryExpertChat: React.FC<CulinaryExpertChatProps> = ({ isOpen, onClose
         chatMessages, // Pass the current history
         (chunkText, isDone) => {
           // Update the expert's message content with each chunk
-          setChatMessages(prev => 
-            prev.map(msg => 
-              msg.id === tempMessageId 
+          setChatMessages(prev =>
+            prev.map(msg =>
+              msg.id === tempMessageId
                 ? { ...msg, content: chunkText } // Update with formatted chunk
                 : msg
             )
           );
-          
+
           // When all chunks are received, remove loading state
           if (isDone) {
             setIsLoading(false);
@@ -181,9 +178,9 @@ const CulinaryExpertChat: React.FC<CulinaryExpertChatProps> = ({ isOpen, onClose
 
     } catch (error) {
       console.error('Error sending message to expert:', error);
-      setChatMessages(prev => [...prev, { 
-        role: 'expert', 
-        content: 'Sorry, I encountered an issue. Please try again.' 
+      setChatMessages(prev => [...prev, {
+        role: 'expert',
+        content: 'Sorry, I encountered an issue. Please try again.'
       }]);
       setIsLoading(false);
     }
@@ -199,7 +196,7 @@ const CulinaryExpertChat: React.FC<CulinaryExpertChatProps> = ({ isOpen, onClose
       reader.readAsDataURL(file);
     }
      // Reset file input value to allow re-uploading the same file
-     if(event.target) event.target.value = ''; 
+     if(event.target) event.target.value = '';
   };
 
   const triggerFileInput = () => {
@@ -213,7 +210,7 @@ const CulinaryExpertChat: React.FC<CulinaryExpertChatProps> = ({ isOpen, onClose
   return (
     <div className="fixed bottom-4 right-4 z-50">
       {/* Hidden file input */}
-       <input 
+       <input
         type="file"
         ref={fileInputRef}
         onChange={handleImageUpload}
@@ -221,37 +218,37 @@ const CulinaryExpertChat: React.FC<CulinaryExpertChatProps> = ({ isOpen, onClose
         className="hidden"
       />
 
-      <div 
-        className="bg-card rounded-lg shadow-xl w-[400px] flex flex-col overflow-hidden border border-border/30"
-        style={{ height: '60vh', maxHeight: '700px' }} // Adjust height as needed
+      <div
+        className="bg-card rounded-lg shadow-xl w-[500px] flex flex-col overflow-hidden border border-border/30"
+        style={{ height: '70vh', maxHeight: '800px' }} // Increased size
       >
         {/* Chat header */}
-        <div className="px-4 py-3 border-b border-border/50 bg-card/95">
+        <div className="px-5 py-4 border-b border-border/50 bg-card/95">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                <MessageSquare size={14} className="text-primary" />
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <MessageSquare size={18} className="text-primary" />
               </div>
-              <h3 className="font-medium text-foreground">Culinary Expert</h3>
+              <h3 className="font-semibold text-lg text-foreground">Culinary Expert</h3>
             </div>
-            <button 
+            <button
               onClick={onClose}
-              className="h-7 w-7 rounded-full hover:bg-secondary flex items-center justify-center transition-colors"
+              className="h-8 w-8 rounded-full hover:bg-secondary flex items-center justify-center transition-colors"
               aria-label="Close chat"
             >
-              <X size={14} />
+              <X size={16} />
             </button>
           </div>
         </div>
-        
+
         {/* Chat messages */}
         <div
           ref={chatContainerRef}
-          className="flex-1 overflow-auto py-4 px-4 space-y-4 bg-secondary/20"
+          className="flex-1 overflow-auto py-5 px-5 space-y-5 bg-secondary/20"
         >
           {chatMessages.map((message, i) => (
-            <div 
-              key={message.id || i} 
+            <div
+              key={message.id || i}
               className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
             >
               {message.role === 'expert' && (
@@ -259,17 +256,17 @@ const CulinaryExpertChat: React.FC<CulinaryExpertChatProps> = ({ isOpen, onClose
                   <MessageSquare size={14} className="text-primary" />
                 </div>
               )}
-              <div 
+              <div
                 className={cn(
-                  "max-w-[85%] rounded-lg p-3 shadow-sm text-sm leading-relaxed",
-                  message.role === 'user' 
-                    ? "bg-primary text-primary-foreground rounded-tr-none" 
+                  "max-w-[90%] rounded-lg p-4 shadow-sm text-base leading-relaxed",
+                  message.role === 'user'
+                    ? "bg-primary text-primary-foreground rounded-tr-none"
                     : "bg-card text-card-foreground rounded-tl-none border border-border/50"
                 )}
               >
-                {message.role === 'expert' 
+                {message.role === 'expert'
                   ? formatExpertMessage(message.content)
-                  : <div className="whitespace-pre-wrap">{message.content}</div> 
+                  : <div className="whitespace-pre-wrap">{message.content}</div>
                 }
               </div>
                {message.role === 'user' && (
@@ -279,7 +276,7 @@ const CulinaryExpertChat: React.FC<CulinaryExpertChatProps> = ({ isOpen, onClose
               )}
             </div>
           ))}
-          
+
           {isLoading && (
             <div className="flex justify-start animate-fade-in">
               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-2 mt-1 flex-shrink-0">
@@ -295,14 +292,14 @@ const CulinaryExpertChat: React.FC<CulinaryExpertChatProps> = ({ isOpen, onClose
             </div>
           )}
         </div>
-        
+
         {/* Message input */}
-        <div className="p-4 border-t border-border/50 bg-card">
+        <div className="p-5 border-t border-border/50 bg-card">
           {/* Image preview */}
            {uploadedImage && (
             <div className="mb-2 relative w-fit">
               <img src={uploadedImage} alt="Preview" className="max-h-20 rounded-md border border-border/50" />
-              <button 
+              <button
                 onClick={() => setUploadedImage(null)}
                 className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 w-5 h-5 flex items-center justify-center text-xs shadow-md hover:bg-destructive/80"
                 aria-label="Remove image"
@@ -311,7 +308,7 @@ const CulinaryExpertChat: React.FC<CulinaryExpertChatProps> = ({ isOpen, onClose
               </button>
             </div>
           )}
-          <form 
+          <form
             onSubmit={(e) => {
               e.preventDefault();
               handleSendMessage();
@@ -319,9 +316,9 @@ const CulinaryExpertChat: React.FC<CulinaryExpertChatProps> = ({ isOpen, onClose
             className="flex items-center gap-2 relative"
           >
              {/* Image Upload Button */}
-            <Button 
+            <Button
               type="button"
-              variant="ghost" 
+              variant="ghost"
               size="sm"
               className="h-9 w-9 text-muted-foreground hover:text-primary p-0"
               onClick={triggerFileInput}
@@ -335,14 +332,14 @@ const CulinaryExpertChat: React.FC<CulinaryExpertChatProps> = ({ isOpen, onClose
               value={currentMessage}
               onChange={(e) => setCurrentMessage(e.target.value)}
               placeholder="Ask anything or upload an image..."
-              className="flex-1 bg-secondary/30 rounded-full pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 border border-border/50"
+              className="flex-1 bg-secondary/30 rounded-full pl-4 pr-10 py-3 text-base focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 border border-border/50"
             />
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={isLoading || (!currentMessage.trim() && !uploadedImage)}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-primary text-primary-foreground rounded-full p-2 disabled:opacity-50 hover:bg-primary/90 transition-colors"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 bg-primary text-primary-foreground rounded-full p-2.5 disabled:opacity-50 hover:bg-primary/90 transition-colors"
             >
-              <Send size={14} className={isLoading ? "opacity-0" : ""} />
+              <Send size={16} className={isLoading ? "opacity-0" : ""} />
             </button>
           </form>
         </div>
@@ -351,4 +348,4 @@ const CulinaryExpertChat: React.FC<CulinaryExpertChatProps> = ({ isOpen, onClose
   );
 };
 
-export default CulinaryExpertChat; 
+export default CulinaryExpertChat;

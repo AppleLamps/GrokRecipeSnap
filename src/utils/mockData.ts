@@ -31,7 +31,15 @@ export const sampleRecipes: Recipe[] = [
       'Mix in fresh herbs and parmesan cheese. Add more pasta water if needed for a silky sauce.',
       'Season with additional salt and pepper to taste. Serve hot with extra parmesan on top.'
     ],
-    tags: ['vegetarian', 'pasta', 'quick meal']
+    tags: ['vegetarian', 'pasta', 'quick meal'],
+    macros: {
+      calories: 450,
+      protein: 18,
+      carbs: 65,
+      fat: 12,
+      fiber: 8,
+      sugar: 6
+    }
   },
   {
     id: '2',
@@ -61,7 +69,15 @@ export const sampleRecipes: Recipe[] = [
       'Bake for 8-10 minutes until salmon is just cooked through.',
       'Garnish with remaining citrus zest and fresh dill before serving.'
     ],
-    tags: ['seafood', 'gluten-free', 'high-protein']
+    tags: ['seafood', 'gluten-free', 'high-protein'],
+    macros: {
+      calories: 380,
+      protein: 32,
+      carbs: 18,
+      fat: 16,
+      sugar: 12,
+      sodium: 520
+    }
   },
   {
     id: '3',
@@ -91,7 +107,14 @@ export const sampleRecipes: Recipe[] = [
       'Bake for 12-14 minutes until soufflés have risen but centers are still slightly jiggly.',
       'Dust with powdered sugar and serve immediately.'
     ],
-    tags: ['dessert', 'chocolate', 'vegetarian']
+    tags: ['dessert', 'chocolate', 'vegetarian'],
+    macros: {
+      calories: 320,
+      protein: 8,
+      carbs: 28,
+      fat: 22,
+      sugar: 24
+    }
   }
 ];
 
@@ -125,6 +148,15 @@ export const generateMockAnalysisResult = (imageUrl: string): Recipe => {
       'Top with the poached egg, sprinkle with red pepper flakes, salt, and pepper.',
       'Garnish with microgreens and a light drizzle of olive oil. Serve immediately.'
     ],
-    tags: ['breakfast', 'vegetarian', 'high-protein']
+    tags: ['breakfast', 'vegetarian', 'high-protein'],
+    macros: {
+      calories: 320,
+      protein: 15,
+      carbs: 25,
+      fat: 18,
+      fiber: 7,
+      sugar: 2,
+      sodium: 380
+    }
   };
 };

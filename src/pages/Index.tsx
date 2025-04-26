@@ -88,7 +88,16 @@ const Index = () => {
           cookTime: cleanFormatting(recipe.cookTime) || "30 mins",
           servings: recipe.servings || 4,
           imageUrl: photo || 'https://via.placeholder.com/400',
-          tags: Array.isArray(recipe.tags) ? recipe.tags.map(cleanFormatting) : []
+          tags: Array.isArray(recipe.tags) ? recipe.tags.map(cleanFormatting) : [],
+          macros: recipe.macros ? {
+            calories: Number(recipe.macros.calories) || 0,
+            protein: Number(recipe.macros.protein) || 0,
+            carbs: Number(recipe.macros.carbs) || 0,
+            fat: Number(recipe.macros.fat) || 0,
+            fiber: recipe.macros.fiber ? Number(recipe.macros.fiber) : undefined,
+            sugar: recipe.macros.sugar ? Number(recipe.macros.sugar) : undefined,
+            sodium: recipe.macros.sodium ? Number(recipe.macros.sodium) : undefined
+          } : undefined
         };
         setGeneratedRecipe(safeRecipe);
       } catch (err) {

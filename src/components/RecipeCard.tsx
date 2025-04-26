@@ -7,7 +7,7 @@ import { sendMessageToChef } from '@/utils/chatService';
 // Helper function to format chef's messages
 const formatChefMessage = (content: string) => {
   if (!content) return '';
-  
+
   // Split into paragraphs
   return content.split('\n\n').map((paragraph, index) => {
     // Handle lists
@@ -24,7 +24,7 @@ const formatChefMessage = (content: string) => {
         </ul>
       );
     }
-    
+
     // Handle numbered lists
     if (paragraph.match(/^\d+\./)) {
       const items = paragraph.split('\n');
@@ -45,7 +45,7 @@ const formatChefMessage = (content: string) => {
         </ol>
       );
     }
-    
+
     // Regular paragraphs
     return (
       <p key={index} className={index > 0 ? 'mt-3' : ''}>
@@ -59,7 +59,7 @@ const formatChefMessage = (content: string) => {
 const formatInlineText = (text: string) => {
   // Split the text by bold markers
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  
+
   return parts.map((part, index) => {
     // Check if this part is bold (surrounded by **)
     if (part.startsWith('**') && part.endsWith('**')) {
@@ -73,6 +73,16 @@ const formatInlineText = (text: string) => {
   });
 };
 
+export interface MacroNutrients {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber?: number;
+  sugar?: number;
+  sodium?: number;
+}
+
 export interface Recipe {
   id: string;
   title: string;
@@ -83,6 +93,7 @@ export interface Recipe {
   ingredients: string[];
   instructions: string[];
   tags?: string[];
+  macros?: MacroNutrients;
 }
 
 interface RecipeCardProps {
@@ -97,7 +108,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
   isFullView = false
 }) => {
   const [isSaved, setIsSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<'ingredients' | 'instructions'>('ingredients');
+  const [activeTab, setActiveTab] = useState<'ingredients' | 'instructions' | 'nutrition'>('ingredients');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<{role: 'user' | 'chef', content: string, id?: string}[]>([]);
   const [currentMessage, setCurrentMessage] = useState('');
@@ -105,16 +116,16 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showFullView, setShowFullView] = useState(isFullView);
-  
+
   // --- Ref for chat message container ---
   const chatContainerRef = useRef<HTMLDivElement>(null);
   // --------------------------------------
-  
-  // --- Add effect to control body scroll --- 
+
+  // --- Add effect to control body scroll ---
   useEffect(() => {
     // Store original body style
     const originalStyle = window.getComputedStyle(document.body).overflow;
-    
+
     if (showFullView) {
       // When full view is shown, prevent body scrolling
       document.body.style.overflow = 'hidden';
@@ -129,7 +140,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
     };
   }, [showFullView]); // Re-run effect when showFullView changes
   // -----------------------------------------
-  
+
   // --- Effect to auto-scroll chat ---
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -138,24 +149,24 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
     }
   }, [chatMessages]); // Dependency array includes chatMessages
   // -----------------------------------
-  
+
   const toggleSave = (e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
     }
     setIsSaved(!isSaved);
-    
+
     // In a real app, you would save this to local storage or a database
     console.log(isSaved ? 'Recipe unsaved' : 'Recipe saved');
   };
 
   const toggleChat = () => {
     setIsChatOpen(!isChatOpen);
-    
+
     // If opening chat, make sure it's not collapsed
     if (!isChatOpen) {
       setIsCollapsed(false);
-      
+
       // If opening chat for the first time, add a welcome message
       if (chatMessages.length === 0) {
         setChatMessages([{
@@ -168,37 +179,37 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
 
   const handleSendMessage = async () => {
     if (!currentMessage.trim()) return;
-    
+
     // Add user message to chat
     const userMessage = currentMessage;
     setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setCurrentMessage('');
     setIsLoading(true);
-    
+
     try {
       // Create a temporary placeholder for the chef's response
       const tempMessageId = `temp-${Date.now()}`;
-      setChatMessages(prev => [...prev, { 
-        role: 'chef', 
+      setChatMessages(prev => [...prev, {
+        role: 'chef',
         content: '',
         id: tempMessageId
       }]);
-      
+
       // Use the streaming API to get a response from the AI
       await sendMessageToChef(
-        userMessage, 
-        recipe, 
+        userMessage,
+        recipe,
         chatMessages, // Pass the conversation history
         (chunkText, isDone) => {
           // Update the message content with each chunk
-          setChatMessages(prev => 
-            prev.map(msg => 
-              msg.id === tempMessageId 
-                ? { ...msg, content: chunkText } 
+          setChatMessages(prev =>
+            prev.map(msg =>
+              msg.id === tempMessageId
+                ? { ...msg, content: chunkText }
                 : msg
             )
           );
-          
+
           // When all chunks are received, remove loading state
           if (isDone) {
             setIsLoading(false);
@@ -210,49 +221,49 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
       setChatMessages(prev => {
         // Filter out the temporary message if it exists
         const withoutTemp = prev.filter(msg => !msg.id);
-        
+
         // Add the error message
-        return [...withoutTemp, { 
-          role: 'chef', 
-          content: 'Sorry, I encountered an issue responding to your question. Please try again.' 
+        return [...withoutTemp, {
+          role: 'chef',
+          content: 'Sorry, I encountered an issue responding to your question. Please try again.'
         }];
       });
       setIsLoading(false);
     }
   };
-  
+
   // Process instructions to separate headers from steps
   const processedInstructions = React.useMemo(() => {
     return recipe.instructions.map(instruction => {
       const trimmedInstruction = instruction.trim();
-      
+
       // Check if this is a section header (short text ending with colon)
-      const isHeader = trimmedInstruction.length < 40 && 
+      const isHeader = trimmedInstruction.length < 40 &&
                        trimmedInstruction.endsWith(':') &&
                        !/^\d+[\.\)]/.test(trimmedInstruction); // Not starting with a number
-      
+
       // Check if instruction already has a number prefix (like "1. Step...")
       const numberMatch = trimmedInstruction.match(/^(\d+)[\.\)]\s+(.+)$/);
       const hasNumber = Boolean(numberMatch);
-      
+
       // Extract the actual content
       let content = trimmedInstruction;
       let stepNumber = null;
-      
+
       if (hasNumber && numberMatch) {
         // If numbered, extract the number and content
         stepNumber = parseInt(numberMatch[1], 10);
         content = numberMatch[2].trim();
       }
-      
+
       // Special handling for "Serve:" instructions - often contains metadata we want to remove
-      if (trimmedInstruction.toLowerCase().startsWith('serve:') || 
+      if (trimmedInstruction.toLowerCase().startsWith('serve:') ||
           (hasNumber && content.toLowerCase().startsWith('serve:')) ||
           (hasNumber && /^serve\b|^serving\b/i.test(content))) {
-        
+
         // Try to extract just the serving instructions without metadata
         const metadataPattern = /(cooking time|cook time|total time|servings|serves|yield|difficulty):/i;
-        
+
         // Find the position of the first metadata marker
         const match = content.match(metadataPattern);
         if (match && match.index) {
@@ -263,12 +274,12 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
           // Common pattern: serving instructions followed by "Time:" or similar
           const timePattern = /\b(Time|servings|difficulty)\b/i;
           const timeMatch = content.match(timePattern);
-          
+
           if (timeMatch && timeMatch.index) {
             // Look for the period or sentence break before this marker
             const contentBeforeTime = content.substring(0, timeMatch.index);
             const periodMatch = contentBeforeTime.match(/\.\s+[A-Z]/);
-            
+
             if (periodMatch && periodMatch.index) {
               // Keep only up to the end of the previous sentence
               content = contentBeforeTime.substring(0, periodMatch.index + 1).trim();
@@ -277,13 +288,13 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
               content = contentBeforeTime.trim();
             }
           }
-          
+
           // Handle case where info about cooking time and servings follows a period
           const metadataAfterPeriod = content.match(/\.\s+(Cooking Time|Cook Time|Servings|Difficulty)/i);
           if (metadataAfterPeriod && metadataAfterPeriod.index) {
             content = content.substring(0, metadataAfterPeriod.index + 1).trim();
           }
-          
+
           // Special case for patterns like: "Serve... Cooking Time: ... Servings: ... Difficulty: ..."
           // This handles the specific case in the steak recipe
           if (content.includes("Cooking Time:") || content.includes("Servings:") || content.includes("Difficulty:")) {
@@ -291,10 +302,10 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
             const cookingTimeIndex = content.indexOf("Cooking Time:");
             const servingsIndex = content.indexOf("Servings:");
             const difficultyIndex = content.indexOf("Difficulty:");
-            
+
             const markers = [cookingTimeIndex, servingsIndex, difficultyIndex]
               .filter(index => index !== -1);
-            
+
             if (markers.length > 0) {
               const firstMarkerIndex = Math.min(...markers);
               content = content.substring(0, firstMarkerIndex).trim();
@@ -302,7 +313,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
           }
         }
       }
-      
+
       return {
         originalText: trimmedInstruction,
         content: content,
@@ -312,36 +323,36 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
       };
     });
   }, [recipe.instructions]);
-  
+
   // Counter for actual steps (excluding headers)
   let stepCounter = 0;
-  
+
   // Compact card view
   if (!showFullView) {
     return (
-      <div 
+      <div
         className={cn(
           // Replicate ArticleCard base styling: removed floating-card, added border, rounding, bg
-          "group cursor-pointer flex flex-col h-full overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-lg", 
+          "group cursor-pointer flex flex-col h-full overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-lg",
           className
         )}
         onClick={() => setShowFullView(true)}
       >
         {/* Explicit container for the image, no padding, handles top rounding if card is rounded */}
         <div className="overflow-hidden relative">
-          <img 
-            src={recipe.imageUrl} 
+          <img
+            src={recipe.imageUrl}
             alt={recipe.title}
             className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300 ease-in-out" // Keep hover zoom
             loading="lazy"
           />
         </div>
-        
+
         {/* Text content container - padding remains here */}
         <div className="flex flex-col flex-grow p-4">
           <div className="flex items-start justify-between mb-2">
             <h3 className="font-display text-lg leading-tight line-clamp-2 flex-grow mr-2">{recipe.title}</h3>
-            <button 
+            <button
               onClick={(e) => {
                 e.stopPropagation();
                 toggleSave();
@@ -351,11 +362,11 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
               {isSaved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
             </button>
           </div>
-          
+
           <p className="text-sm text-muted-foreground line-clamp-3 mb-3 flex-grow">
             {recipe.description}
           </p>
-          
+
           <div className="flex items-center gap-3 pt-3 border-t border-border/30 mt-auto">
             <div className="flex items-center text-xs">
               <Clock size={14} className="text-primary/70 mr-1.5" />
@@ -370,7 +381,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
       </div>
     );
   }
-  
+
   // Full view
   return (
     <div className={cn(
@@ -389,14 +400,14 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
         <div className="flex flex-col w-full animate-fade-in">
           {/* Hero section */}
           <div className="relative h-72 sm:h-96 overflow-hidden bg-black">
-            <img 
-              src={recipe.imageUrl} 
+            <img
+              src={recipe.imageUrl}
               alt={recipe.title}
               className="w-full h-full object-cover opacity-90"
             />
-            
+
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
-            
+
             <div className="absolute bottom-0 left-0 right-0 p-6 pb-8">
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-display text-white mb-2 drop-shadow-sm">
                 {recipe.title}
@@ -404,13 +415,13 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
               <p className="text-white/90 text-sm sm:text-base max-w-2xl drop-shadow-sm">
                 {recipe.description}
               </p>
-              
+
               <div className="flex items-center gap-4 mt-4">
                 <div className="bg-white/15 backdrop-blur-sm rounded-full px-3 py-1.5 flex items-center text-white text-xs">
                   <Clock size={14} className="mr-1.5" />
                   {recipe.cookTime}
                 </div>
-                
+
                 <div className="bg-white/15 backdrop-blur-sm rounded-full px-3 py-1.5 flex items-center text-white text-xs">
                   <Users size={14} className="mr-1.5" />
                   {recipe.servings} servings
@@ -418,7 +429,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
               </div>
             </div>
           </div>
-          
+
           {/* Content */}
           <div className="px-4 sm:px-6 py-6 flex-1 max-w-3xl mx-auto w-full">
             {/* Tabs */}
@@ -434,7 +445,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
               >
                 Ingredients
               </button>
-              
+
               <button
                 className={cn(
                   "pb-2 px-4 text-sm font-medium transition-colors",
@@ -446,8 +457,20 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
               >
                 Instructions
               </button>
+
+              <button
+                className={cn(
+                  "pb-2 px-4 text-sm font-medium transition-colors",
+                  activeTab === 'nutrition'
+                    ? "border-b-2 border-primary text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => setActiveTab('nutrition')}
+              >
+                Nutrition
+              </button>
             </div>
-            
+
             {/* Tab content */}
             <div className="animate-fade-in">
               {activeTab === 'ingredients' ? (
@@ -461,7 +484,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                       </li>
                     ))}
                   </ul>
-                  
+
                   {/* Recipe metadata */}
                   <div className="pt-6 mt-6 border-t border-border/50">
                     <h3 className="text-sm font-medium text-muted-foreground mb-3">Recipe Information</h3>
@@ -483,7 +506,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                     </ul>
                   </div>
                 </div>
-              ) : (
+              ) : activeTab === 'instructions' ? (
                 <div className="space-y-8">
                   {processedInstructions.map((instruction, index) => {
                     if (instruction.isHeader) {
@@ -493,10 +516,10 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                         </h3>
                       );
                     } else {
-                      const displayNumber = instruction.hasLeadingNumber 
-                        ? instruction.stepNumber 
+                      const displayNumber = instruction.hasLeadingNumber
+                        ? instruction.stepNumber
                         : index + 1 - processedInstructions.slice(0, index).filter(item => item.isHeader).length;
-                      
+
                       return (
                         <div key={index} className="flex group">
                           <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary flex items-center justify-center mr-4 mt-0.5 group-hover:bg-primary/10 transition-colors">
@@ -511,9 +534,117 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                     }
                   })}
                 </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Nutrition Information */}
+                  <div className="bg-secondary/20 rounded-lg p-6">
+                    <h3 className="text-lg font-medium mb-4">Nutritional Information</h3>
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Nutritional values per serving. This recipe makes {recipe.servings} servings.
+                    </p>
+
+                    {recipe.macros ? (
+                      <div className="space-y-5">
+                        {/* Calories */}
+                        <div>
+                          <div className="flex justify-between mb-1">
+                            <span className="text-sm font-medium">Calories</span>
+                            <span className="text-sm font-semibold">{recipe.macros.calories} kcal</span>
+                          </div>
+                          <div className="w-full bg-secondary/30 rounded-full h-2.5">
+                            <div className="bg-primary h-2.5 rounded-full" style={{ width: `${Math.min(100, (recipe.macros.calories / 800) * 100)}%` }}></div>
+                          </div>
+                        </div>
+
+                        {/* Macronutrients */}
+                        <div className="grid grid-cols-3 gap-4 pt-2">
+                          {/* Protein */}
+                          <div className="bg-secondary/30 rounded-lg p-4 text-center">
+                            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                              <span className="text-blue-600 font-semibold">{recipe.macros.protein}g</span>
+                            </div>
+                            <span className="text-sm font-medium block">Protein</span>
+                          </div>
+
+                          {/* Carbs */}
+                          <div className="bg-secondary/30 rounded-lg p-4 text-center">
+                            <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                              <span className="text-amber-600 font-semibold">{recipe.macros.carbs}g</span>
+                            </div>
+                            <span className="text-sm font-medium block">Carbs</span>
+                          </div>
+
+                          {/* Fat */}
+                          <div className="bg-secondary/30 rounded-lg p-4 text-center">
+                            <div className="w-12 h-12 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                              <span className="text-rose-600 font-semibold">{recipe.macros.fat}g</span>
+                            </div>
+                            <span className="text-sm font-medium block">Fat</span>
+                          </div>
+                        </div>
+
+                        {/* Additional nutrients if available */}
+                        {(recipe.macros.fiber !== undefined ||
+                          recipe.macros.sugar !== undefined ||
+                          recipe.macros.sodium !== undefined) && (
+                          <div className="pt-4 mt-4 border-t border-border/30">
+                            <h4 className="text-sm font-medium mb-3">Additional Nutrients</h4>
+                            <div className="grid grid-cols-3 gap-4">
+                              {recipe.macros.fiber !== undefined && (
+                                <div className="flex flex-col">
+                                  <span className="text-sm text-muted-foreground">Fiber</span>
+                                  <span className="text-sm font-medium">{recipe.macros.fiber}g</span>
+                                </div>
+                              )}
+
+                              {recipe.macros.sugar !== undefined && (
+                                <div className="flex flex-col">
+                                  <span className="text-sm text-muted-foreground">Sugar</span>
+                                  <span className="text-sm font-medium">{recipe.macros.sugar}g</span>
+                                </div>
+                              )}
+
+                              {recipe.macros.sodium !== undefined && (
+                                <div className="flex flex-col">
+                                  <span className="text-sm text-muted-foreground">Sodium</span>
+                                  <span className="text-sm font-medium">{recipe.macros.sodium}mg</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <div className="w-16 h-16 bg-secondary/40 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                          </svg>
+                        </div>
+                        <p className="text-muted-foreground">Nutritional information not available for this recipe.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Dietary Information */}
+                  {recipe.tags && recipe.tags.length > 0 && (
+                    <div className="pt-4">
+                      <h3 className="text-sm font-medium mb-3">Dietary Information</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {recipe.tags.map((tag, index) => (
+                          <span key={index} className="bg-secondary/30 text-xs px-3 py-1 rounded-full">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-            
+
             {/* Action buttons */}
             <div className="mt-8 flex justify-center gap-4">
               <Button
@@ -523,7 +654,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
               >
                 {isSaved ? "Saved" : "Save Recipe"}
               </Button>
-              
+
               <Button
                 onClick={toggleChat}
                 icon={<MessageCircle size={18} />}
@@ -548,7 +679,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
               <MessageCircle size={24} />
             </button>
           ) : (
-            <div 
+            <div
               className="bg-card rounded-lg shadow-xl w-[400px] flex flex-col overflow-hidden border border-border/30"
               style={{ height: isExpanded ? '80vh' : '500px' }}
             >
@@ -562,7 +693,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                     <h3 className="font-medium text-foreground">Chef Assistant</h3>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button 
+                    <button
                       onClick={() => setIsExpanded(!isExpanded)}
                       className="h-7 w-7 rounded-full hover:bg-secondary flex items-center justify-center transition-colors"
                       aria-label={isExpanded ? "Shrink chat" : "Expand chat"}
@@ -577,7 +708,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                         </svg>
                       )}
                     </button>
-                    <button 
+                    <button
                       onClick={() => setIsCollapsed(true)}
                       className="h-7 w-7 rounded-full hover:bg-secondary flex items-center justify-center transition-colors"
                       aria-label="Minimize chat"
@@ -586,7 +717,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                         <path d="M2 7.5C2 7.22386 2.22386 7 2.5 7H12.5C12.7761 7 13 7.22386 13 7.5C13 7.77614 12.7761 8 12.5 8H2.5C2.22386 8 2 7.77614 2 7.5Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path>
                       </svg>
                     </button>
-                    <button 
+                    <button
                       onClick={() => setIsChatOpen(false)}
                       className="h-7 w-7 rounded-full hover:bg-secondary flex items-center justify-center transition-colors"
                       aria-label="Close chat"
@@ -601,15 +732,15 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                   <span>Currently helping with: <span className="font-medium text-foreground">{recipe.title}</span></span>
                 </div>
               </div>
-              
+
               {/* Chat messages */}
-              <div 
+              <div
                 ref={chatContainerRef}
                 className="flex-1 overflow-auto py-4 px-4 space-y-4 bg-secondary/20"
               >
                 {chatMessages.map((message, i) => (
-                  <div 
-                    key={i} 
+                  <div
+                    key={i}
                     className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
                   >
                     {message.role === 'chef' && (
@@ -617,11 +748,11 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                         <MessageCircle size={14} className="text-primary" />
                       </div>
                     )}
-                    <div 
+                    <div
                       className={cn(
                         "max-w-[85%] rounded-lg p-3 shadow-sm",
-                        message.role === 'user' 
-                          ? "bg-primary text-primary-foreground rounded-tr-none" 
+                        message.role === 'user'
+                          ? "bg-primary text-primary-foreground rounded-tr-none"
                           : "bg-card text-card-foreground rounded-tl-none border border-border/50"
                       )}
                     >
@@ -642,7 +773,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                     )}
                   </div>
                 ))}
-                
+
                 {isLoading && !chatMessages.some(msg => msg.id) && (
                   <div className="flex justify-start animate-fade-in">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-2 mt-1 flex-shrink-0">
@@ -658,10 +789,10 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                   </div>
                 )}
               </div>
-              
+
               {/* Message input */}
               <div className="p-3 border-t border-border/50 bg-card/95">
-                <form 
+                <form
                   onSubmit={(e) => {
                     e.preventDefault();
                     handleSendMessage();
@@ -675,8 +806,8 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                     placeholder="Ask about this recipe..."
                     className="flex-1 bg-secondary/30 rounded-full pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 border border-border/50"
                   />
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     disabled={isLoading || !currentMessage.trim()}
                     className="absolute right-2 bg-primary text-primary-foreground rounded-full p-2 disabled:opacity-50 hover:bg-primary/90 transition-colors"
                   >

@@ -1,3 +1,13 @@
+export interface MacroNutrients {
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+  fiber?: number
+  sugar?: number
+  sodium?: number
+}
+
 export interface Recipe {
   id: string
   title: string
@@ -12,4 +22,5 @@ export interface Recipe {
   metadata?: Record<string, any>
   popularity_score?: number
   tags?: string[]
-} 
+  macros?: MacroNutrients
+}

@@ -160,7 +160,16 @@ Return ONLY the JSON object with the following structure:
   "totalTime": "e.g., 45 mins",
   "servings": Number (e.g., 4),
   "difficulty": "${difficulty}",
-  "tags": ["relevant", "tags", "${cuisine}", "${recipeType}", "${mainIngredient}", "${cookingMethod}"]
+  "tags": ["relevant", "tags", "${cuisine}", "${recipeType}", "${mainIngredient}", "${cookingMethod}"],
+  "macros": {
+    "calories": Number (e.g., 350),
+    "protein": Number (e.g., 25),
+    "carbs": Number (e.g., 30),
+    "fat": Number (e.g., 15),
+    "fiber": Number (optional),
+    "sugar": Number (optional),
+    "sodium": Number (optional)
+  }
 }`;
 
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
@@ -224,7 +233,16 @@ Return ONLY the JSON object with the following structure:
       cookTime: recipeData.cookTime || '30 mins',
       servings: Number(recipeData.servings) || 4,
       tags: Array.isArray(recipeData.tags) ? recipeData.tags : [],
-      imageUrl
+      imageUrl,
+      macros: recipeData.macros ? {
+        calories: Number(recipeData.macros.calories) || 0,
+        protein: Number(recipeData.macros.protein) || 0,
+        carbs: Number(recipeData.macros.carbs) || 0,
+        fat: Number(recipeData.macros.fat) || 0,
+        fiber: recipeData.macros.fiber ? Number(recipeData.macros.fiber) : undefined,
+        sugar: recipeData.macros.sugar ? Number(recipeData.macros.sugar) : undefined,
+        sodium: recipeData.macros.sodium ? Number(recipeData.macros.sodium) : undefined
+      } : undefined
     };
 
     // Store the recipe in Supabase with all fields
@@ -237,7 +255,8 @@ Return ONLY the JSON object with the following structure:
         imageUrl: recipe.imageUrl,
         cookTime: recipe.cookTime,
         servings: recipe.servings,
-        tags: recipe.tags
+        tags: recipe.tags,
+        macros: recipe.macros
       }
     );
 
@@ -381,7 +400,8 @@ export async function generateRecipe(imageData: string): Promise<Recipe> {
         imageUrl: recipe.imageUrl,
         cookTime: recipe.cookTime,
         servings: recipe.servings,
-        tags: recipe.tags
+        tags: recipe.tags,
+        macros: recipe.macros
       }
     );
 

@@ -14,6 +14,15 @@ export interface ApiResponse {
     difficulty: string;
     tags: string[];
     imageUrl?: string;
+    macros?: {
+      calories: number;
+      protein: number;
+      carbs: number;
+      fat: number;
+      fiber?: number;
+      sugar?: number;
+      sodium?: number;
+    };
   };
 }
 
@@ -24,7 +33,7 @@ export interface ApiResponse {
  */
 function cleanMarkdown(text: string): string {
   if (!text) return '';
-  
+
   return text
     // Remove markdown bold/italic markers
     .replace(/\*\*/g, '')
@@ -65,9 +74,9 @@ export async function analyzeFood(imageData: string): Promise<ApiResponse> {
   if (imageData.startsWith('data:image')) {
     base64Image = imageData.split(',')[1];
   }
-  
+
   const apiKey = getXaiApiKey();
-  
+
   try {
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
@@ -99,7 +108,7 @@ export async function analyzeFood(imageData: string): Promise<ApiResponse> {
               },
               {
                 type: "text",
-                text: "What's this dish? Please provide a detailed recipe for it with a descriptive title, list of ingredients, and clear instructions. Use plain text only, no markdown formatting."
+                text: "What's this dish? Please provide a detailed recipe for it with a descriptive title, list of ingredients, clear instructions, and nutritional information. Include macros (calories, protein, carbs, fat) per serving. Use plain text only, no markdown formatting."
               }
             ]
           }
@@ -113,10 +122,10 @@ export async function analyzeFood(imageData: string): Promise<ApiResponse> {
 
     const data = await response.json();
     console.log("API Response:", data.choices[0].message.content);
-    
+
     // Parse the response content to extract recipe information
     const recipe = parseRecipeFromResponse(data.choices[0].message.content);
-    
+
     return { recipe };
   } catch (error) {
     console.error('Error analyzing food image:', error);
@@ -135,26 +144,27 @@ function parseRecipeFromResponse(responseText: string): ApiResponse['recipe'] {
       try {
         // Try to parse it as JSON
         const jsonData = JSON.parse(responseText);
-        
+
         // If it's already in our expected format
         if (jsonData.title && (jsonData.ingredients || jsonData.instructions)) {
           return {
             title: cleanMarkdown(jsonData.title) || "Unknown Dish",
             description: cleanMarkdown(jsonData.description) || "",
-            ingredients: Array.isArray(jsonData.ingredients) 
-              ? jsonData.ingredients.map(cleanMarkdown) 
+            ingredients: Array.isArray(jsonData.ingredients)
+              ? jsonData.ingredients.map(cleanMarkdown)
               : [],
-            instructions: Array.isArray(jsonData.instructions) 
-              ? jsonData.instructions.map(cleanMarkdown) 
+            instructions: Array.isArray(jsonData.instructions)
+              ? jsonData.instructions.map(cleanMarkdown)
               : [],
             cookTime: cleanMarkdown(jsonData.cookTime || jsonData.cookingTime) || "30 mins",
             prepTime: cleanMarkdown(jsonData.prepTime || jsonData.preparationTime) || "15 mins",
             totalTime: cleanMarkdown(jsonData.totalTime) || "45 mins",
             servings: jsonData.servings || jsonData.yield || 4,
             difficulty: cleanMarkdown(jsonData.difficulty) || "Medium",
-            tags: Array.isArray(jsonData.tags) 
-              ? jsonData.tags.map(cleanMarkdown) 
+            tags: Array.isArray(jsonData.tags)
+              ? jsonData.tags.map(cleanMarkdown)
               : [],
+            macros: jsonData.macros || jsonData.nutrition || jsonData.nutritionalInfo || null,
           };
         }
       } catch (e) {
@@ -168,7 +178,7 @@ function parseRecipeFromResponse(responseText: string): ApiResponse['recipe'] {
     const description = cleanMarkdown(extractDescription(responseText)) || "";
     const ingredients = extractIngredients(responseText).map(cleanMarkdown);
     const instructions = extractInstructions(responseText).map(cleanMarkdown);
-    
+
     return {
       title,
       description,
@@ -180,6 +190,7 @@ function parseRecipeFromResponse(responseText: string): ApiResponse['recipe'] {
       servings: extractServings(responseText) || 4,
       difficulty: cleanMarkdown(extractDifficulty(responseText)) || "Medium",
       tags: extractTags(responseText).map(cleanMarkdown),
+      macros: extractMacros(responseText),
     };
   } catch (error) {
     console.error('Error parsing recipe from response:', error);
@@ -195,6 +206,12 @@ function parseRecipeFromResponse(responseText: string): ApiResponse['recipe'] {
       servings: 4,
       difficulty: "Medium",
       tags: [],
+      macros: {
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0
+      },
     };
   }
 }
@@ -207,14 +224,14 @@ function extractTitle(text: string): string | null {
     /^#\s*Title[:\-]*\s*(.*?)[\n\r]/im, // "# Title: Something"
     /^\*\*Title[:\-]*\s*(.*?)\*\*[\n\r]/im, // "**Title: Something**"
   ];
-  
+
   for (const pattern of titleWithLabelPatterns) {
     const match = text.match(pattern);
     if (match && match[1] && match[1].trim().length > 0) {
       return match[1].trim();
     }
   }
-  
+
   // If no title with label found, try to find a title at the beginning of the response
   const titlePatterns = [
     /^#\s*(.*?)[\n\r]/m,           // Markdown heading
@@ -228,7 +245,7 @@ function extractTitle(text: string): string | null {
       return match[1].trim();
     }
   }
-  
+
   return null;
 }
 
@@ -245,21 +262,21 @@ function extractDescription(text: string): string | null {
       return match[1].trim();
     }
   }
-  
+
   return null;
 }
 
 function extractIngredients(text: string): string[] {
   // Look for ingredients section
   const ingredientsMatch = text.match(/(?:Ingredients|INGREDIENTS)(?::|[\n\r]+)(.*?)(?=(?:Instructions|INSTRUCTIONS|Directions|DIRECTIONS|Preparation|Method|Steps|##|$))/is);
-  
+
   if (ingredientsMatch && ingredientsMatch[1]) {
     return ingredientsMatch[1]
       .split(/[\n\r]+/)
       .map(line => line.replace(/^[-*•\d+\.]+\s*/, '').trim())
       .filter(line => line.length > 0 && !line.match(/^ingredients/i));
   }
-  
+
   // Fallback: look for bullet points or numbered lists
   const bulletItems = text.match(/^[-*•]\s*(.*?)[\n\r]/gm);
   if (bulletItems && bulletItems.length > 0) {
@@ -267,40 +284,40 @@ function extractIngredients(text: string): string[] {
       .map(line => line.replace(/^[-*•]\s*/, '').trim())
       .filter(line => line.length > 0);
   }
-  
+
   return [];
 }
 
 function extractInstructions(text: string): string[] {
   // Look for instructions section
   const instructionsMatch = text.match(/(?:Instructions|INSTRUCTIONS|Directions|DIRECTIONS|Preparation|Method|Steps)(?::|[\n\r]+)(.*?)(?=(?:##|Notes|Tips|$))/is);
-  
+
   if (!instructionsMatch || !instructionsMatch[1]) {
     return [];
   }
-  
+
   const instructionText = instructionsMatch[1].trim();
-  
+
   // First, let's separate any metadata that might be at the end of instructions
   // This is a common pattern where cooking time, servings, etc. appear after the actual steps
   const metadataRegex = /(Cooking Time|Cook Time|Total Time|Servings|Serves|Yield|Difficulty):/i;
-  
+
   // Split the text at the first metadata marker
   const metadataSplit = instructionText.split(metadataRegex);
   const actualInstructionsText = metadataSplit[0].trim();
-  
+
   // Handle different formats consistently by normalizing the text first
-  
+
   // Check for clearly numbered steps - this is the most common format
   // Match patterns like "1. Step description" or "1) Step description"
   const numberedStepsPattern = /^\s*\d+[\.\)]\s+.+$/gm;
   const hasNumberedSteps = numberedStepsPattern.test(actualInstructionsText);
-  
+
   if (hasNumberedSteps) {
     // Process as a numbered list
     const steps: string[] = [];
     const lines = actualInstructionsText.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
-    
+
     for (const line of lines) {
       // Check if this is a numbered step
       const numberedMatch = line.match(/^\s*(\d+)[\.\)]\s+(.+)$/);
@@ -318,33 +335,33 @@ function extractInstructions(text: string): string[] {
         }
       }
     }
-    
+
     return steps;
   }
-  
+
   // If not clearly numbered, try to identify sections and steps
   const lines = actualInstructionsText.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
   const steps: string[] = [];
-  
+
   let currentStep = "";
-  
+
   for (const line of lines) {
     // Skip if this line contains metadata markers
     if (metadataRegex.test(line)) {
       continue;
     }
-    
+
     // Check if this line looks like a section header or a new step
     const isSectionHeader = line.length < 30 && line.endsWith(':');
     const isNewParagraph = line.length > 20; // Longer lines are likely full step descriptions
-    
+
     if (isSectionHeader || (isNewParagraph && currentStep.length > 0)) {
       // Save previous step if exists
       if (currentStep.length > 0) {
         steps.push(currentStep);
         currentStep = "";
       }
-      
+
       // Add this line as a new step or header
       steps.push(line);
     } else {
@@ -356,12 +373,12 @@ function extractInstructions(text: string): string[] {
       }
     }
   }
-  
+
   // Add the last step if there's content
   if (currentStep.length > 0) {
     steps.push(currentStep);
   }
-  
+
   return steps;
 }
 
@@ -379,7 +396,7 @@ function extractCookTime(text: string): string | null {
       return match[1].trim();
     }
   }
-  
+
   return null;
 }
 
@@ -401,7 +418,7 @@ function extractTotalTime(text: string): string | null {
       return match[1].trim();
     }
   }
-  
+
   return null;
 }
 
@@ -422,7 +439,7 @@ function extractServings(text: string): number | null {
       }
     }
   }
-  
+
   return null;
 }
 
@@ -440,7 +457,7 @@ function extractDifficulty(text: string): string | null {
       return match[1].trim();
     }
   }
-  
+
   return null;
 }
 
@@ -452,11 +469,69 @@ function extractTags(text: string): string[] {
   return [];
 }
 
+function extractMacros(text: string): { calories: number; protein: number; carbs: number; fat: number; fiber?: number; sugar?: number; sodium?: number } | null {
+  // Look for a nutrition section
+  const nutritionMatch = text.match(/(?:Nutrition(?:al)?\s*(?:Information|Facts|Values|Macros)|Macros|Nutritional\s*Information)[:\-]*\s*(.*?)(?=\n\n|\n#|\n##|$)/is);
+
+  // Default values
+  const defaultMacros = {
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0
+  };
+
+  if (!nutritionMatch || !nutritionMatch[1]) {
+    // Try to find individual macro values anywhere in the text
+    const caloriesMatch = text.match(/(?:Calories|Energy)[:\-]*\s*(\d+)/i);
+    const proteinMatch = text.match(/Protein[:\-]*\s*(\d+)(?:\s*g)?/i);
+    const carbsMatch = text.match(/(?:Carbs|Carbohydrates)[:\-]*\s*(\d+)(?:\s*g)?/i);
+    const fatMatch = text.match(/Fat[:\-]*\s*(\d+)(?:\s*g)?/i);
+
+    if (caloriesMatch || proteinMatch || carbsMatch || fatMatch) {
+      return {
+        calories: caloriesMatch ? parseInt(caloriesMatch[1], 10) : 0,
+        protein: proteinMatch ? parseInt(proteinMatch[1], 10) : 0,
+        carbs: carbsMatch ? parseInt(carbsMatch[1], 10) : 0,
+        fat: fatMatch ? parseInt(fatMatch[1], 10) : 0
+      };
+    }
+
+    return null;
+  }
+
+  const nutritionText = nutritionMatch[1];
+
+  // Extract individual macro values
+  const caloriesMatch = nutritionText.match(/(?:Calories|Energy)[:\-]*\s*(\d+)/i);
+  const proteinMatch = nutritionText.match(/Protein[:\-]*\s*(\d+)(?:\s*g)?/i);
+  const carbsMatch = nutritionText.match(/(?:Carbs|Carbohydrates)[:\-]*\s*(\d+)(?:\s*g)?/i);
+  const fatMatch = nutritionText.match(/Fat[:\-]*\s*(\d+)(?:\s*g)?/i);
+  const fiberMatch = nutritionText.match(/Fiber[:\-]*\s*(\d+)(?:\s*g)?/i);
+  const sugarMatch = nutritionText.match(/Sugar[:\-]*\s*(\d+)(?:\s*g)?/i);
+  const sodiumMatch = nutritionText.match(/Sodium[:\-]*\s*(\d+)(?:\s*mg)?/i);
+
+  // Build the macros object with optional fields
+  const macros = {
+    calories: caloriesMatch ? parseInt(caloriesMatch[1], 10) : 0,
+    protein: proteinMatch ? parseInt(proteinMatch[1], 10) : 0,
+    carbs: carbsMatch ? parseInt(carbsMatch[1], 10) : 0,
+    fat: fatMatch ? parseInt(fatMatch[1], 10) : 0
+  };
+
+  // Add optional fields if they exist
+  if (fiberMatch) macros.fiber = parseInt(fiberMatch[1], 10);
+  if (sugarMatch) macros.sugar = parseInt(sugarMatch[1], 10);
+  if (sodiumMatch) macros.sodium = parseInt(sodiumMatch[1], 10);
+
+  return macros;
+}
+
 // Last resort fallback extraction methods for when structured parsing fails
 function extractFallbackIngredients(text: string): string[] {
   // Extract any lines that look like ingredients (short lines, possibly with measurements)
   const lines = text.split(/[\n\r]+/);
-  
+
   return lines
     .filter(line => {
       // Likely to be an ingredient if:
@@ -464,8 +539,8 @@ function extractFallbackIngredients(text: string): string[] {
       // - Contains measurements (cup, tbsp, g, oz) or food items
       // - Doesn't look like an instruction (no verbs like "mix", "stir")
       const trimmed = line.trim();
-      return trimmed.length > 0 && 
-             trimmed.length < 100 && 
+      return trimmed.length > 0 &&
+             trimmed.length < 100 &&
              /\b(cup|tbsp|tsp|g|oz|lb|ml|l)\b|flour|sugar|salt|butter|oil/i.test(trimmed) &&
              !/\b(mix|stir|combine|bake|cook|preheat)\b/i.test(trimmed);
     })
@@ -479,4 +554,4 @@ function extractFallbackInstructions(text: string): string[] {
     .map(para => para.trim())
     .filter(para => para.length > 20 && para.length < 500)
     .slice(0, 10); // Limit to 10 instructions to avoid including unrelated text
-} 
+}
