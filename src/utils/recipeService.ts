@@ -100,12 +100,12 @@ async function enforceRateLimit() {
   const now = Date.now();
   const timeSinceLastCall = now - lastApiCall;
   const minDelay = API_RATE_WINDOW / API_RATE_LIMIT;
-  
+
   if (timeSinceLastCall < minDelay) {
     const delay = minDelay - timeSinceLastCall;
     await sleep(delay);
   }
-  
+
   lastApiCall = Date.now();
 }
 
@@ -115,7 +115,7 @@ async function enforceRateLimit() {
  */
 async function _generateSingleRecipe(): Promise<Recipe> {
   const apiKey = getXaiApiKey();
-  
+
   if (!apiKey) {
     throw new RecipeGenerationError('API key is required for recipe generation');
   }
@@ -170,7 +170,7 @@ Return ONLY the JSON object with the following structure:
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "grok-2-latest",
+        model: "grok-3-latest",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
@@ -200,7 +200,7 @@ Return ONLY the JSON object with the following structure:
     if (missingFields.length > 0) {
       throw new RecipeGenerationError('Recipe is missing required fields', { missingFields, recipeData });
     }
-    
+
     // Generate Image URL separately after validating core recipe data
     let imageUrl = 'https://via.placeholder.com/400'; // Default fallback
     try {
@@ -253,7 +253,7 @@ Return ONLY the JSON object with the following structure:
 }
 
 /**
- * Generates multiple recipes with optimized concurrent requests, 
+ * Generates multiple recipes with optimized concurrent requests,
  * calling callbacks as each recipe is generated. Saves successful results to cache.
  * @param count Number of recipes to generate
  * @param onRecipeGenerated Callback function executed when a recipe is successfully generated
@@ -271,62 +271,62 @@ export async function generateRecipes(
 
   console.log('[RecipeService] Generating new recipes...');
 
-  const allGeneratedRecipes: Recipe[] = []; 
+  const allGeneratedRecipes: Recipe[] = [];
   const usedTitles = new Set<string>();
   const maxRetries = 5;
-  const concurrentLimit = 2; 
+  const concurrentLimit = 2;
   const maxDuplicateTitles = 8;
-  
+
   let activePromises = 0;
-  const promises: Promise<void>[] = []; 
+  const promises: Promise<void>[] = [];
 
   const generateSingleRecipeWithRetry = async (index: number): Promise<void> => {
     let attempt = 0;
     let duplicateCount = 0;
     while (attempt < maxRetries) {
       try {
-        const recipe = await _generateSingleRecipe(); 
+        const recipe = await _generateSingleRecipe();
 
         const normalizedTitle = recipe.title.toLowerCase().trim();
         if (!usedTitles.has(normalizedTitle)) {
             usedTitles.add(normalizedTitle);
-            allGeneratedRecipes[index] = recipe; 
-            onRecipeGenerated(recipe); 
-            return; 
+            allGeneratedRecipes[index] = recipe;
+            onRecipeGenerated(recipe);
+            return;
         }
-        
+
         duplicateCount++;
         console.log(`[RecipeService] Duplicate recipe title detected (attempt ${attempt + 1}), retrying...`);
 
         if (duplicateCount >= maxDuplicateTitles) {
           console.warn('[RecipeService] Too many duplicate titles, modifying title');
           const randomSuffix = Math.floor(Math.random() * 100);
-          recipe.title = `${recipe.title} #${randomSuffix}`; 
-          if (!usedTitles.has(recipe.title.toLowerCase().trim())) { 
+          recipe.title = `${recipe.title} #${randomSuffix}`;
+          if (!usedTitles.has(recipe.title.toLowerCase().trim())) {
               usedTitles.add(recipe.title.toLowerCase().trim());
-              allGeneratedRecipes[index] = recipe; 
-              onRecipeGenerated(recipe); 
-              return; 
+              allGeneratedRecipes[index] = recipe;
+              onRecipeGenerated(recipe);
+              return;
           } else {
               console.warn('[RecipeService] Modified title still conflicts, skipping attempt.');
           }
         }
-        
+
         attempt++;
-        await sleep(500 * attempt); 
+        await sleep(500 * attempt);
 
       } catch (error) {
         console.error(`[RecipeService] Attempt ${attempt + 1} for recipe index ${index} failed:`, error);
         attempt++;
         if (attempt === maxRetries) {
-          if (onRecipeError) onRecipeError(error, index); 
+          if (onRecipeError) onRecipeError(error, index);
           return;
         }
-        await sleep(1000 * attempt); 
+        await sleep(1000 * attempt);
       }
     }
     const finalError = new RecipeGenerationError(`Failed to generate unique recipe for index ${index} after max retries`);
-    if (onRecipeError) onRecipeError(finalError, index); 
+    if (onRecipeError) onRecipeError(finalError, index);
   };
 
   // Manage concurrency
@@ -339,7 +339,7 @@ export async function generateRecipes(
     activePromises++;
     const promise = generateSingleRecipeWithRetry(indexToProcess).finally(() => {
         activePromises--;
-        runNext(); 
+        runNext();
     });
     promises.push(promise);
     if (activePromises < concurrentLimit) runNext();
@@ -358,8 +358,8 @@ export async function generateRecipes(
 
   const duration = Date.now() - startTime;
   console.log(`[RecipeService] Recipe generation attempts completed in ${duration}ms.`);
-  if (onComplete) onComplete(); 
-} 
+  if (onComplete) onComplete();
+}
 
 export async function generateRecipe(imageData: string): Promise<Recipe> {
   const apiKey = getXaiApiKey();
@@ -370,7 +370,7 @@ export async function generateRecipe(imageData: string): Promise<Recipe> {
   try {
     // Your existing recipe generation logic here...
     const recipe = await _generateSingleRecipe();
-    
+
     // Store the recipe in Supabase
     await storeRecipe(
       recipe.title,
@@ -400,4 +400,4 @@ export async function getPopularRecipes(limit = 10): Promise<Recipe[]> {
     console.error('Error fetching popular recipes:', error);
     return [];
   }
-} 
+}

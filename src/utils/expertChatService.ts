@@ -22,7 +22,7 @@ function formatExpertResponse(text: string): string {
   if (!text) return '';
   // Basic paragraph handling for now
   return text
-    .replace(/\n(?!\n)/g, '\n\n') 
+    .replace(/\n(?!\n)/g, '\n\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -30,7 +30,7 @@ function formatExpertResponse(text: string): string {
 /**
  * Sends a message (text and/or image) to the culinary expert AI and gets a response.
  * Supports streaming responses.
- * 
+ *
  * @param message The user's text message
  * @param imageData Optional base64 encoded image data (or null)
  * @param history Previous chat messages (FE format)
@@ -38,13 +38,13 @@ function formatExpertResponse(text: string): string {
  * @returns Promise<void> (as response is handled via onChunk)
  */
 export async function sendMessageToExpert(
-  message: string, 
-  imageData: string | null, 
+  message: string,
+  imageData: string | null,
   history: ChatMessage[] = [],
   onChunk: (chunk: string, done: boolean) => void
 ): Promise<void> {
   const apiKey = getXaiApiKey();
-  
+
   if (!apiKey) {
     throw new Error('API key is required for chat functionality');
   }
@@ -58,7 +58,7 @@ export async function sendMessageToExpert(
     }));
 
   // Define the system prompt for the culinary expert
-  const systemMessage = `You are a friendly, knowledgeable, and versatile Culinary Expert AI. 
+  const systemMessage = `You are a friendly, knowledgeable, and versatile Culinary Expert AI.
 Answer general questions about cooking, recipes, ingredients, techniques, food science, nutrition, and culinary history.
 If the user uploads an image, analyze it and provide relevant information, such as identifying the dish, suggesting recipes, or answering questions about it.
 
@@ -67,13 +67,13 @@ Keep your tone helpful, encouraging, and informative.`;
 
   // Construct the user message content for the API
   const userApiContent: Array<{ type: string; text?: string; image_url?: { url: string, detail?: string }; }> = [];
-  
+
   if (imageData) {
     // Add image part (ensure it includes the data URL prefix)
     let imageUrl = imageData;
     if (!imageData.startsWith('data:image')) {
       // Attempt to guess common types if prefix is missing (though frontend should provide it)
-      imageUrl = `data:image/jpeg;base64,${imageData}`; 
+      imageUrl = `data:image/jpeg;base64,${imageData}`;
     }
     userApiContent.push({
       type: "image_url",
@@ -91,7 +91,7 @@ Keep your tone helpful, encouraging, and informative.`;
   });
 
   // Determine the model based on whether an image is present
-  const model = imageData ? "grok-2-vision-1212" : "grok-2-latest";
+  const model = imageData ? "grok-2-vision-1212" : "grok-3-latest";
 
   try {
     const payload = {
@@ -124,33 +124,33 @@ Keep your tone helpful, encouraging, and informative.`;
     if (!reader) {
       throw new Error('Failed to get response reader');
     }
-    
+
     const decoder = new TextDecoder();
     let accumulatedResponse = '';
-    
+
     while (true) {
       const { done, value } = await reader.read();
-      
+
       if (done) {
         onChunk(formatExpertResponse(accumulatedResponse), true); // Final chunk
         break;
       }
-      
+
       const chunk = decoder.decode(value);
       const lines = chunk.split('\n').filter(line => line.trim().startsWith('data: '));
-      
+
       for (const line of lines) {
         if (line.includes('[DONE]')) continue;
-        
+
         try {
           const jsonString = line.substring(line.indexOf('{'));
           const data = JSON.parse(jsonString);
           const contentDelta = data.choices[0]?.delta?.content || '';
-          
+
           if (contentDelta) {
             accumulatedResponse += contentDelta;
             // Send intermediate formatted chunk
-            onChunk(formatExpertResponse(accumulatedResponse + '...'), false); 
+            onChunk(formatExpertResponse(accumulatedResponse + '...'), false);
           }
         } catch (e) {
           console.error('Error parsing streaming expert response chunk:', e, 'Line:', line);
@@ -165,4 +165,4 @@ Keep your tone helpful, encouraging, and informative.`;
     // Rethrow or handle as needed for internal logging
     // throw error;
   }
-} 
+}

@@ -37,9 +37,9 @@ const Header: React.FC<HeaderProps> = ({
             </Link>
           )}
         </div>
-        
+
         <nav className="flex items-center gap-4 md:gap-6">
-          <Link 
+          <Link
             to="/"
             className={cn(
               "text-sm font-medium transition-colors hover:text-primary",
@@ -47,15 +47,6 @@ const Header: React.FC<HeaderProps> = ({
             )}
           >
             Home
-          </Link>
-          <Link 
-            to="/articles"
-            className={cn(
-              "text-sm font-medium transition-colors hover:text-primary",
-              location.pathname === '/articles' ? 'text-primary' : 'text-muted-foreground'
-            )}
-          >
-            Articles
           </Link>
           {rightAction && <div className="ml-4">{rightAction}</div>}
         </nav>
