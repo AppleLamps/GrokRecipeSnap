@@ -75,16 +75,31 @@ const Index = () => {
           ingredients: recipe.ingredients?.length || 0,
           instructions: recipe.instructions?.length || 0
         });
+
+        // Process instructions to remove metadata lines
+        let processedInstructions = [];
+        if (Array.isArray(recipe.instructions) && recipe.instructions.length > 0) {
+          // Filter out any standalone metadata lines like "Servings: 4"
+          processedInstructions = recipe.instructions.filter(instruction => {
+            const trimmed = instruction.trim();
+            // Skip instructions that are just metadata
+            if (/^(Servings|Cooking Time|Difficulty):?\s+\w+$/i.test(trimmed)) {
+              return false;
+            }
+            return true;
+          }).map(cleanFormatting);
+        } else {
+          processedInstructions = ["No instructions detected. Try uploading a clearer image of the dish."];
+        }
+
         const safeRecipe: Recipe = {
           id: Date.now().toString(),
           title: cleanFormatting(recipe.title) || "Homemade Dish",
           description: cleanFormatting(recipe.description) || "A delicious homemade recipe.",
           ingredients: Array.isArray(recipe.ingredients) && recipe.ingredients.length > 0
             ? recipe.ingredients.map(cleanFormatting)
-            : ["Ingredients could not be detected. Please try again with a clearer image."],
-          instructions: Array.isArray(recipe.instructions) && recipe.instructions.length > 0
-            ? recipe.instructions
-            : ["Instructions could not be detected. Please try again with a clearer image."],
+            : ["No ingredients detected. Try uploading a clearer image or a different angle of the dish."],
+          instructions: processedInstructions,
           cookTime: cleanFormatting(recipe.cookTime) || "30 mins",
           servings: recipe.servings || 4,
           imageUrl: photo || 'https://via.placeholder.com/400',

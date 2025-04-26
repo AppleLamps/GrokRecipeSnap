@@ -234,7 +234,31 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
 
   // Process instructions to separate headers from steps
   const processedInstructions = React.useMemo(() => {
-    return recipe.instructions.map(instruction => {
+    // Check if we have a single instruction that contains an error message
+    if (recipe.instructions.length === 1 &&
+        recipe.instructions[0].includes("could not be detected") ||
+        recipe.instructions[0].includes("No instructions detected")) {
+      return [{
+        originalText: recipe.instructions[0],
+        content: recipe.instructions[0],
+        isHeader: false,
+        hasLeadingNumber: false,
+        stepNumber: null,
+        isError: true
+      }];
+    }
+
+    // Filter out any metadata-only instructions like "Servings: 4" that might appear at the beginning
+    const filteredInstructions = recipe.instructions.filter(instruction => {
+      const trimmed = instruction.trim();
+      // Skip instructions that are just metadata
+      if (/^(Servings|Cooking Time|Difficulty):?\s+\w+$/i.test(trimmed)) {
+        return false;
+      }
+      return true;
+    });
+
+    return filteredInstructions.map(instruction => {
       const trimmedInstruction = instruction.trim();
 
       // Check if this is a section header (short text ending with colon)
@@ -296,7 +320,6 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
           }
 
           // Special case for patterns like: "Serve... Cooking Time: ... Servings: ... Difficulty: ..."
-          // This handles the specific case in the steak recipe
           if (content.includes("Cooking Time:") || content.includes("Servings:") || content.includes("Difficulty:")) {
             // If we still have these markers, look for the first one and cut there
             const cookingTimeIndex = content.indexOf("Cooking Time:");
@@ -319,7 +342,8 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
         content: content,
         isHeader: isHeader,
         hasLeadingNumber: hasNumber,
-        stepNumber: stepNumber
+        stepNumber: stepNumber,
+        isError: false
       };
     });
   }, [recipe.instructions]);
@@ -476,14 +500,29 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
               {activeTab === 'ingredients' ? (
                 <div className="space-y-6">
                   {/* Main ingredients list */}
-                  <ul className="space-y-3">
-                    {recipe.ingredients.map((ingredient, index) => (
-                      <li key={index} className="flex items-start">
-                        <span className="w-2 h-2 mt-2 rounded-full bg-primary flex-shrink-0" />
-                        <span className="ml-4 leading-relaxed">{ingredient}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  {recipe.ingredients.length === 1 && recipe.ingredients[0].includes("could not be detected") ? (
+                    <div className="flex items-center justify-center py-8 text-center">
+                      <div className="max-w-md">
+                        <div className="w-16 h-16 bg-secondary/40 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                          </svg>
+                        </div>
+                        <p className="text-muted-foreground">{recipe.ingredients[0]}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <ul className="space-y-3">
+                      {recipe.ingredients.map((ingredient, index) => (
+                        <li key={index} className="flex items-start">
+                          <span className="w-2 h-2 mt-2 rounded-full bg-primary flex-shrink-0" />
+                          <span className="ml-4 leading-relaxed">{ingredient}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
 
                   {/* Recipe metadata */}
                   <div className="pt-6 mt-6 border-t border-border/50">
@@ -508,31 +547,47 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                 </div>
               ) : activeTab === 'instructions' ? (
                 <div className="space-y-8">
-                  {processedInstructions.map((instruction, index) => {
-                    if (instruction.isHeader) {
-                      return (
-                        <h3 key={index} className="font-semibold text-lg mt-8 mb-4 text-foreground">
-                          {instruction.originalText}
-                        </h3>
-                      );
-                    } else {
-                      const displayNumber = instruction.hasLeadingNumber
-                        ? instruction.stepNumber
-                        : index + 1 - processedInstructions.slice(0, index).filter(item => item.isHeader).length;
-
-                      return (
-                        <div key={index} className="flex group">
-                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary flex items-center justify-center mr-4 mt-0.5 group-hover:bg-primary/10 transition-colors">
-                            <span className="text-secondary-foreground group-hover:text-primary font-medium text-sm transition-colors">{displayNumber}</span>
-                          </div>
-                          <div className="flex-1">
-                            {/* Always render the content directly, using the calculated displayNumber */}
-                            <p className="text-muted-foreground leading-relaxed">{instruction.content}</p>
-                          </div>
+                  {processedInstructions.length > 0 && processedInstructions[0].isError ? (
+                    <div className="flex items-center justify-center py-8 text-center">
+                      <div className="max-w-md">
+                        <div className="w-16 h-16 bg-secondary/40 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                          </svg>
                         </div>
-                      );
-                    }
-                  })}
+                        <p className="text-muted-foreground">{processedInstructions[0].content}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {processedInstructions.map((instruction, index) => {
+                        if (instruction.isHeader) {
+                          return (
+                            <h3 key={index} className="font-semibold text-lg mt-8 mb-4 text-foreground">
+                              {instruction.originalText}
+                            </h3>
+                          );
+                        } else {
+                          const displayNumber = instruction.hasLeadingNumber
+                            ? instruction.stepNumber
+                            : index + 1 - processedInstructions.slice(0, index).filter(item => item.isHeader).length;
+
+                          return (
+                            <div key={index} className="flex group">
+                              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary flex items-center justify-center mr-4 mt-0.5 group-hover:bg-primary/10 transition-colors">
+                                <span className="text-secondary-foreground group-hover:text-primary font-medium text-sm transition-colors">{displayNumber}</span>
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-muted-foreground leading-relaxed">{instruction.content}</p>
+                              </div>
+                            </div>
+                          );
+                        }
+                      })}
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -543,7 +598,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                       Nutritional values per serving. This recipe makes {recipe.servings} servings.
                     </p>
 
-                    {recipe.macros ? (
+                    {recipe.macros && recipe.macros.calories > 0 ? (
                       <div className="space-y-5">
                         {/* Calories */}
                         <div>
@@ -559,7 +614,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                         {/* Macronutrients */}
                         <div className="grid grid-cols-3 gap-4 pt-2">
                           {/* Protein */}
-                          <div className="bg-secondary/30 rounded-lg p-4 text-center">
+                          <div className="bg-secondary/30 rounded-lg p-4 text-center hover:shadow-md transition-shadow">
                             <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
                               <span className="text-blue-600 font-semibold">{recipe.macros.protein}g</span>
                             </div>
@@ -567,7 +622,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                           </div>
 
                           {/* Carbs */}
-                          <div className="bg-secondary/30 rounded-lg p-4 text-center">
+                          <div className="bg-secondary/30 rounded-lg p-4 text-center hover:shadow-md transition-shadow">
                             <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-2">
                               <span className="text-amber-600 font-semibold">{recipe.macros.carbs}g</span>
                             </div>
@@ -575,11 +630,50 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                           </div>
 
                           {/* Fat */}
-                          <div className="bg-secondary/30 rounded-lg p-4 text-center">
+                          <div className="bg-secondary/30 rounded-lg p-4 text-center hover:shadow-md transition-shadow">
                             <div className="w-12 h-12 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-2">
                               <span className="text-rose-600 font-semibold">{recipe.macros.fat}g</span>
                             </div>
                             <span className="text-sm font-medium block">Fat</span>
+                          </div>
+                        </div>
+
+                        {/* Macronutrient Distribution */}
+                        <div className="pt-4 mt-4 border-t border-border/30">
+                          <h4 className="text-sm font-medium mb-3">Macronutrient Distribution</h4>
+                          <div className="h-4 w-full rounded-full overflow-hidden flex">
+                            {/* Calculate percentages */}
+                            {(() => {
+                              const total = recipe.macros.protein * 4 + recipe.macros.carbs * 4 + recipe.macros.fat * 9;
+                              const proteinPct = Math.round((recipe.macros.protein * 4 / total) * 100);
+                              const carbsPct = Math.round((recipe.macros.carbs * 4 / total) * 100);
+                              const fatPct = Math.round((recipe.macros.fat * 9 / total) * 100);
+
+                              return (
+                                <>
+                                  <div
+                                    className="bg-blue-500 h-full"
+                                    style={{ width: `${proteinPct}%` }}
+                                    title={`Protein: ${proteinPct}%`}
+                                  ></div>
+                                  <div
+                                    className="bg-amber-500 h-full"
+                                    style={{ width: `${carbsPct}%` }}
+                                    title={`Carbs: ${carbsPct}%`}
+                                  ></div>
+                                  <div
+                                    className="bg-rose-500 h-full"
+                                    style={{ width: `${fatPct}%` }}
+                                    title={`Fat: ${fatPct}%`}
+                                  ></div>
+                                </>
+                              );
+                            })()}
+                          </div>
+                          <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                            <span>Protein</span>
+                            <span>Carbs</span>
+                            <span>Fat</span>
                           </div>
                         </div>
 
@@ -591,21 +685,21 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                             <h4 className="text-sm font-medium mb-3">Additional Nutrients</h4>
                             <div className="grid grid-cols-3 gap-4">
                               {recipe.macros.fiber !== undefined && (
-                                <div className="flex flex-col">
+                                <div className="flex flex-col bg-secondary/20 p-3 rounded-lg">
                                   <span className="text-sm text-muted-foreground">Fiber</span>
                                   <span className="text-sm font-medium">{recipe.macros.fiber}g</span>
                                 </div>
                               )}
 
                               {recipe.macros.sugar !== undefined && (
-                                <div className="flex flex-col">
+                                <div className="flex flex-col bg-secondary/20 p-3 rounded-lg">
                                   <span className="text-sm text-muted-foreground">Sugar</span>
                                   <span className="text-sm font-medium">{recipe.macros.sugar}g</span>
                                 </div>
                               )}
 
                               {recipe.macros.sodium !== undefined && (
-                                <div className="flex flex-col">
+                                <div className="flex flex-col bg-secondary/20 p-3 rounded-lg">
                                   <span className="text-sm text-muted-foreground">Sodium</span>
                                   <span className="text-sm font-medium">{recipe.macros.sodium}mg</span>
                                 </div>
@@ -624,6 +718,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                           </svg>
                         </div>
                         <p className="text-muted-foreground">Nutritional information not available for this recipe.</p>
+                        <p className="text-xs text-muted-foreground mt-2">Try uploading a clearer image or a different angle of the dish.</p>
                       </div>
                     )}
                   </div>
@@ -634,7 +729,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                       <h3 className="text-sm font-medium mb-3">Dietary Information</h3>
                       <div className="flex flex-wrap gap-2">
                         {recipe.tags.map((tag, index) => (
-                          <span key={index} className="bg-secondary/30 text-xs px-3 py-1 rounded-full">
+                          <span key={index} className="bg-secondary/30 text-xs px-3 py-1.5 rounded-full hover:bg-secondary/50 transition-colors">
                             {tag}
                           </span>
                         ))}
