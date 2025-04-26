@@ -249,7 +249,8 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
         isHeader: false,
         hasLeadingNumber: false,
         stepNumber: null,
-        isError: true
+        isError: true,
+        isNutritionalInfo: false
       }];
     }
 
@@ -278,6 +279,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
       // Extract the actual content
       let content = trimmedInstruction;
       let stepNumber = null;
+      let isNutritionalInfo = false;
 
       if (hasNumber && numberMatch) {
         // If numbered, extract the number and content
@@ -285,12 +287,69 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
         content = numberMatch[2].trim();
       }
 
-      // Special handling for "Serve:" instructions - often contains metadata we want to remove
-      if (trimmedInstruction.toLowerCase().startsWith('serve:') ||
-          (hasNumber && content.toLowerCase().startsWith('serve:')) ||
-          (hasNumber && /^serve\b|^serving\b/i.test(content))) {
+      // Check if this is nutritional information
+      const hasNutritionalInfo =
+        /nutritional information|calories|protein|carb|fat|sodium|fiber|sugar/i.test(content) &&
+        /\d+\s*(kcal|g|mg)/.test(content);
 
-        // Try to extract just the serving instructions without metadata
+      // Check if this is a serving instruction
+      const isServingInstruction =
+        content.toLowerCase().startsWith('serving:') ||
+        content.toLowerCase().startsWith('serve ') ||
+        (hasNumber && /^serve\b|^serving\b/i.test(content));
+
+      // If it has nutritional info or is a serving instruction with numbers, mark it
+      if (hasNutritionalInfo || (isServingInstruction && /\d+\s*(kcal|g|mg)/.test(content))) {
+        isNutritionalInfo = true;
+
+        // Format nutritional information for better display
+        if (hasNutritionalInfo) {
+          // Extract the serving instruction part if it exists
+          let servingPart = '';
+          if (isServingInstruction) {
+            const servingMatch = content.match(/^(Serving:|Serve\s+[^.]+\.)/i);
+            if (servingMatch) {
+              servingPart = servingMatch[0];
+              content = content.replace(servingMatch[0], '').trim();
+            }
+          }
+
+          // Extract nutritional information
+          const nutritionParts = [];
+
+          // Look for common nutrition patterns
+          const caloriesMatch = content.match(/calories:?\s*(\d+)\s*kcal/i);
+          if (caloriesMatch) nutritionParts.push(`Calories: ${caloriesMatch[1]} kcal`);
+
+          const proteinMatch = content.match(/protein:?\s*(\d+\.?\d*)\s*g/i);
+          if (proteinMatch) nutritionParts.push(`Protein: ${proteinMatch[1]}g`);
+
+          const carbsMatch = content.match(/carbohydrates:?\s*(\d+\.?\d*)\s*g/i);
+          if (carbsMatch) nutritionParts.push(`Carbohydrates: ${carbsMatch[1]}g`);
+
+          const fatMatch = content.match(/fat:?\s*(\d+\.?\d*)\s*g/i);
+          if (fatMatch) nutritionParts.push(`Total Fat: ${fatMatch[1]}g`);
+
+          const satFatMatch = content.match(/saturated\s*fat:?\s*(\d+\.?\d*)\s*g/i);
+          if (satFatMatch) nutritionParts.push(`Saturated Fat: ${satFatMatch[1]}g`);
+
+          const fiberMatch = content.match(/fiber:?\s*(\d+\.?\d*)\s*g/i);
+          if (fiberMatch) nutritionParts.push(`Fiber: ${fiberMatch[1]}g`);
+
+          const sugarMatch = content.match(/sugar:?\s*(\d+\.?\d*)\s*g/i);
+          if (sugarMatch) nutritionParts.push(`Sugar: ${sugarMatch[1]}g`);
+
+          const sodiumMatch = content.match(/sodium:?\s*(\d+)\s*mg/i);
+          if (sodiumMatch) nutritionParts.push(`Sodium: ${sodiumMatch[1]}mg`);
+
+          // If we extracted structured nutrition info, use it
+          if (nutritionParts.length > 0) {
+            content = servingPart ? `${servingPart}\n\n` : '';
+            content += `Nutritional Information per Serving:\n${nutritionParts.join('\n')}`;
+          }
+        }
+      } else if (isServingInstruction) {
+        // Special handling for "Serve:" instructions without nutritional info
         const metadataPattern = /(cooking time|cook time|total time|servings|serves|yield|difficulty):/i;
 
         // Find the position of the first metadata marker
@@ -348,7 +407,8 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
         isHeader: isHeader,
         hasLeadingNumber: hasNumber,
         stepNumber: stepNumber,
-        isError: false
+        isError: false,
+        isNutritionalInfo: isNutritionalInfo
       };
     });
   }, [recipe.instructions]);
@@ -406,7 +466,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
     const totalRecipe = calculateNutrition(servings);
 
     // Macronutrient distribution calculation (based on per serving)
-    const totalCalories = perServing.calories;
+    // Calculate calories from each macronutrient
     const proteinCalories = perServing.protein * 4;
     const carbsCalories = perServing.carbs * 4;
     const fatCalories = perServing.fat * 9;
@@ -620,7 +680,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                   </div>
                 </div>
               ) : activeTab === 'instructions' ? (
-                <div className="space-y-8">
+                <div className="space-y-6">
                   {processedInstructions.length > 0 && processedInstructions[0].isError ? (
                     <div className="flex items-center justify-center py-8 text-center">
                       <div className="max-w-md">
@@ -636,30 +696,47 @@ const RecipeCard: React.FC<RecipeCardProps> = ({
                     </div>
                   ) : (
                     <>
-                      {processedInstructions.map((instruction, index) => {
-                        if (instruction.isHeader) {
-                          return (
-                            <h3 key={index} className="font-semibold text-lg mt-8 mb-4 text-foreground">
-                              {instruction.originalText}
-                            </h3>
-                          );
-                        } else {
-                          const displayNumber = instruction.hasLeadingNumber
-                            ? instruction.stepNumber
-                            : index + 1 - processedInstructions.slice(0, index).filter(item => item.isHeader).length;
+                      {/* Instructions with improved formatting */}
+                      <div className="space-y-6">
+                        {processedInstructions.map((instruction, index) => {
+                          if (instruction.isHeader) {
+                            return (
+                              <h3 key={index} className="font-semibold text-lg mt-8 mb-4 text-foreground">
+                                {instruction.originalText}
+                              </h3>
+                            );
+                          } else if (instruction.isNutritionalInfo) {
+                            // Special handling for nutritional information
+                            return (
+                              <div key={index} className="mt-8 pt-6 border-t border-border/50">
+                                <h3 className="font-medium text-base mb-4">Serving & Nutrition</h3>
+                                <div className="bg-secondary/20 rounded-lg p-4">
+                                  {instruction.content.split('\n').map((line, i) => (
+                                    <p key={i} className={`${i > 0 ? 'mt-2' : ''} ${i === 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                      {line}
+                                    </p>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          } else {
+                            const displayNumber = instruction.hasLeadingNumber
+                              ? instruction.stepNumber
+                              : index + 1 - processedInstructions.slice(0, index).filter(item => item.isHeader || item.isNutritionalInfo).length;
 
-                          return (
-                            <div key={index} className="flex group">
-                              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary flex items-center justify-center mr-4 mt-0.5 group-hover:bg-primary/10 transition-colors">
-                                <span className="text-secondary-foreground group-hover:text-primary font-medium text-sm transition-colors">{displayNumber}</span>
+                            return (
+                              <div key={index} className="flex group items-start bg-secondary/10 rounded-lg p-4 hover:bg-secondary/20 transition-colors">
+                                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mr-4 group-hover:bg-primary/20 transition-colors">
+                                  <span className="text-primary font-medium text-sm transition-colors">{displayNumber}</span>
+                                </div>
+                                <div className="flex-1 pt-1.5">
+                                  <p className="text-foreground leading-relaxed">{instruction.content}</p>
+                                </div>
                               </div>
-                              <div className="flex-1">
-                                <p className="text-muted-foreground leading-relaxed">{instruction.content}</p>
-                              </div>
-                            </div>
-                          );
-                        }
-                      })}
+                            );
+                          }
+                        })}
+                      </div>
                     </>
                   )}
                 </div>
